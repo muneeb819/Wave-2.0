@@ -1,0 +1,406 @@
+/* Comfortable type sizes on a full-size workbench. Compact mobile rules live in styles.css. */
+@media (min-width: 721px) {
+  .workspace-switcher strong {
+    font-size: 11px;
+  }
+  .workspace-switcher small {
+    font-size: 10px;
+  }
+  .sidebar-section-label {
+    font-size: 9px;
+  }
+  .main-navigation > button,
+  .resource-navigation > a {
+    font-size: 12px;
+  }
+  .sidebar-note h3 {
+    font-size: 12px;
+  }
+  .sidebar-note p {
+    font-size: 11px;
+  }
+  .sidebar-note button {
+    font-size: 10px;
+  }
+  .developer-profile strong {
+    font-size: 11px;
+  }
+  .developer-profile small {
+    font-size: 10px;
+  }
+  .breadcrumb {
+    font-size: 11px;
+  }
+  .environment-tag,
+  .docs-top-link {
+    font-size: 10px;
+  }
+  .page-header .eyebrow {
+    font-size: 9px;
+  }
+  .page-header p {
+    font-size: 13px;
+  }
+  .page-tabs button {
+    font-size: 12px;
+  }
+  .cloud-connection {
+    font-size: 10px;
+  }
+  .panel-heading h2,
+  .pipeline-card .panel-heading h2 {
+    font-size: 13px;
+  }
+  .tiny-tag {
+    font-size: 8px;
+  }
+  .pipeline-indicator {
+    font-size: 10px;
+  }
+  .pipeline-footer {
+    font-size: 9px;
+  }
+  .pipeline-footer-end {
+    font-size: 8px;
+  }
+  .pipeline-node.user-node,
+  .pipeline-node.agent-node {
+    font-size: 13px !important;
+  }
+  .inference-node > span:nth-child(2) {
+    font-size: 13px;
+  }
+  .inference-node strong {
+    font-size: 14px;
+  }
+  .inference-label {
+    font-size: 7px;
+  }
+  .node-caption,
+  .diagram-note {
+    font-size: 9px;
+  }
+  .branch-kind {
+    font-size: 8px;
+  }
+  .branch-name {
+    font-size: 12px;
+  }
+  .branch-realtime .branch-kind {
+    font-size: 7px;
+  }
+  .branch-realtime .branch-name {
+    font-size: 10px;
+  }
+  .section-heading h2 {
+    font-size: 18px;
+  }
+  .section-heading p {
+    font-size: 11px;
+  }
+  .model-count-badge {
+    font-size: 9px;
+  }
+  .reset-defaults {
+    font-size: 10px;
+  }
+  .model-card h3 {
+    font-size: 16px;
+  }
+  .model-description {
+    font-size: 11px;
+  }
+  .model-step {
+    font-size: 9px;
+  }
+  .model-step > span {
+    font-size: 7px;
+  }
+  .model-select-copy strong {
+    font-size: 13px;
+  }
+  .provider-name {
+    font-size: 10px;
+  }
+  .model-option-label,
+  .model-option-row .text-button,
+  .language-select {
+    font-size: 11px;
+  }
+  .model-id {
+    font-size: 8px;
+  }
+  .model-tag {
+    font-size: 7px;
+  }
+  .playground-section-heading .eyebrow {
+    font-size: 8px;
+  }
+  .session-hint {
+    font-size: 10px;
+  }
+  .tester-heading h2,
+  .code-panel .panel-heading h2 {
+    font-size: 13px;
+  }
+  .mode-switch button {
+    font-size: 9px;
+  }
+  .mode-switch button svg {
+    width: 11px;
+    height: 11px;
+  }
+  .inner-tabs button {
+    font-size: 10px;
+  }
+  .inner-tabs button > span {
+    font-size: 8px;
+  }
+  .tester-session-state {
+    font-size: 9px;
+  }
+  .conversation-intro h3 {
+    font-size: 15px;
+  }
+  .conversation-intro p {
+    font-size: 11px;
+  }
+  .intro-demo-button {
+    font-size: 10px;
+  }
+  .message-meta strong {
+    font-size: 11px;
+  }
+  .message-meta time {
+    font-size: 8px;
+  }
+  .message-content p {
+    font-size: 12px;
+  }
+  .demo-message-tag {
+    font-size: 6px;
+  }
+  .chat-input-form {
+    height: 42px;
+  }
+  .chat-input-form input {
+    font-size: 11px;
+  }
+  .tester-footnote {
+    font-size: 8px;
+  }
+  .agent-status-bar {
+    font-size: 9px;
+  }
+  .simulated-label {
+    font-size: 7px;
+  }
+  .metrics-strip-label {
+    font-size: 7px;
+  }
+  .metric-values > div > span {
+    font-size: 8px;
+  }
+  .metric-values strong {
+    font-size: 20px;
+  }
+  .event-row {
+    font-size: 10px;
+  }
+  .event-row time {
+    font-size: 8px;
+  }
+  .events-empty > span {
+    font-size: 13px;
+  }
+  .events-empty > p {
+    font-size: 10px;
+  }
+  .code-block.compact {
+    font-size: 10px;
+  }
+  .language-pill {
+    font-size: 9px;
+  }
+  .code-filename {
+    font-size: 9px;
+  }
+  .code-sync-indicator {
+    font-size: 8px;
+  }
+  .code-panel-note p {
+    font-size: 11px;
+  }
+  .code-panel-note p > span {
+    font-size: 10px;
+  }
+  .code-panel-footer {
+    font-size: 10px;
+  }
+  .feature-row,
+  .feature-row > a {
+    font-size: 9px;
+  }
+  .app-footer {
+    font-size: 9px;
+  }
+  .history-notice strong {
+    font-size: 13px;
+  }
+  .history-notice span {
+    font-size: 11px;
+  }
+  .search-field input {
+    font-size: 12px;
+  }
+  .history-filters > button {
+    font-size: 11px;
+  }
+  .history-table th {
+    font-size: 9px;
+  }
+  .history-table td {
+    font-size: 12px;
+  }
+  .history-session-name strong {
+    font-size: 12px;
+  }
+  .history-session-name small {
+    font-size: 9px;
+  }
+  .mode-badge {
+    font-size: 10px;
+  }
+  .history-panel-footer {
+    font-size: 10px;
+  }
+  .history-panel-footer > span:last-child {
+    font-size: 9px;
+  }
+  .settings-intro h3 {
+    font-size: 16px;
+  }
+  .settings-intro p {
+    font-size: 12px;
+  }
+  .credential-row > code {
+    font-size: 11px;
+  }
+  .credential-row > span {
+    font-size: 10px;
+  }
+  .settings-security-note {
+    font-size: 11px;
+  }
+  .settings-security-note code {
+    font-size: 10px;
+  }
+  .preferences-body h3 {
+    font-size: 14px;
+  }
+  .preferences-body p {
+    font-size: 12px;
+  }
+  .settings-card-body .setup-step h3 {
+    font-size: 14px;
+  }
+  .settings-card-body .setup-step p {
+    font-size: 12px;
+  }
+  .settings-card-body .setup-command code {
+    font-size: 10px;
+  }
+  .production-note h3 {
+    font-size: 14px;
+  }
+  .production-note p {
+    font-size: 12px;
+  }
+  .production-note code {
+    font-size: 10px;
+  }
+  .production-note a {
+    font-size: 11px;
+  }
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  .model-description {
+    font-size: 10px;
+  }
+  .model-select-copy strong {
+    font-size: 12px;
+  }
+  .model-step > span {
+    font-size: 6px;
+  }
+  .model-id {
+    font-size: 7px;
+  }
+  .model-tag {
+    font-size: 6px;
+  }
+  .model-option-label,
+  .model-option-row .text-button,
+  .language-select {
+    font-size: 9px;
+  }
+  .branch-name {
+    font-size: 10px;
+  }
+  .inference-node > span:nth-child(2) {
+    font-size: 11px;
+  }
+  .inference-node strong {
+    font-size: 12px;
+  }
+  .inference-label {
+    font-size: 6px;
+  }
+  .metric-values > div > span {
+    font-size: 7px;
+  }
+  .code-sync-indicator {
+    font-size: 7px;
+  }
+  .playground-section-heading .eyebrow {
+    font-size: 7px;
+  }
+  .session-hint {
+    font-size: 8px;
+  }
+  .tester-heading h2,
+  .code-panel .panel-heading h2 {
+    font-size: 11px;
+  }
+  .feature-row,
+  .feature-row > a {
+    font-size: 8px;
+  }
+}
+
+.pipeline-scroll-hint {
+  display: none !important;
+}
+@media (max-width: 560px) {
+  .pipeline-scroll-hint {
+    display: flex !important;
+    margin-left: auto;
+    gap: 5px !important;
+    font-size: 7px;
+  }
+  .pipeline-scroll-hint svg {
+    width: 10px;
+    height: 10px;
+  }
+  .pipeline-footer-end {
+    display: none !important;
+  }
+}
+
+/* xAI provider wordmark for the requested speech-to-text source. */
+.xai-mark {
+  color: #e5efee;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+}

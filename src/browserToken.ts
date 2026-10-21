@@ -1,7 +1,7 @@
 import type { Config } from "./types";
 
 export const PUBLIC_CHROME_STUDIO_URL =
-  "https://muneeb819.github.io/Wave-2.0/?mode=live";
+  "https://raw.githack.com/muneeb819/Wave-2.0/arena/060acccf-wave-2-0/docs/index.html?mode=live";
 
 const SESSION_CREDS_KEY = "inference-studio:session-livekit-creds";
 

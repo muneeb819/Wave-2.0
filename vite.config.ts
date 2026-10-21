@@ -6,6 +6,7 @@ const permissionsHeaders = {
 };
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   // The browser SDK is lazy-loaded only when starting a real LiveKit session.
   build: { chunkSizeWarningLimit: 650 },

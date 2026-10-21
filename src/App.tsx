@@ -95,6 +95,11 @@ import {
   quickstartAgent,
   snippet,
 } from "./code";
+import {
+  getStandaloneChromeUrl,
+  readSessionBrowserCreds,
+  saveSessionBrowserCreds,
+} from "./browserToken";
 
 const initialCloud: CloudStatus = {
   configured: false,
@@ -180,8 +185,15 @@ function BotLinkEditor({
           agent_name: activeDispatch,
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) {
+      if (response.ok) {
+        const payload = await response.json();
+        setApiKey("");
+        setApiSecret("");
+        onSavedCredentials(payload as CloudStatus);
+        return;
+      }
+      if (response.status !== 404 && response.status !== 405) {
+        const payload = await response.json();
         const msg =
           typeof payload.detail === "string"
             ? payload.detail
@@ -189,16 +201,35 @@ function BotLinkEditor({
         onNotify(msg);
         return;
       }
-      setApiKey("");
-      setApiSecret("");
-      onSavedCredentials(payload as CloudStatus);
     } catch {
-      onNotify(
-        "Backend API unreachable. Start it with `python start.py` first.",
-      );
+      /* Static HTTPS deployment (e.g. GitHub Pages): fall back to tab-scoped WebCrypto signing */
     } finally {
       setSavingCreds(false);
     }
+
+    // Serverless Chrome mode (e.g. GitHub Pages): store in this tab's sessionStorage only & sign via WebCrypto
+    saveSessionBrowserCreds({
+      livekitUrl: livekitUrl.trim(),
+      apiKey: apiKey.trim(),
+      apiSecret: apiSecret.trim(),
+    });
+    let hostLabel: string | null = null;
+    try {
+      hostLabel = new URL(livekitUrl.trim()).hostname;
+    } catch {
+      hostLabel = livekitUrl.trim();
+    }
+    setApiKey("");
+    setApiSecret("");
+    onSavedCredentials({
+      ...cloud,
+      configured: true,
+      missing: [],
+      invalid_url: false,
+      offline: false,
+      server_host: hostLabel,
+      agent_name: activeDispatch,
+    });
   }
 
   return (
@@ -391,10 +422,7 @@ export default function App() {
   });
   const isEmbeddedIframe =
     typeof window !== "undefined" && window.self !== window.top;
-  const standaloneUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/?mode=live`
-      : "/?mode=live";
+  const standaloneUrl = getStandaloneChromeUrl();
   const [cloud, setCloud] = useState<CloudStatus>(initialCloud);
   const [checking, setChecking] = useState(false);
   const [modal, setModal] = useState<Dialog>(null);
@@ -470,7 +498,20 @@ export default function App() {
       setChecking(true);
       try {
         const response = await fetch("/api/status");
-        if (!response.ok) throw new Error("API unavailable");
+        if (!response.ok) {
+          if (response.status === 404) {
+            const tabCreds = readSessionBrowserCreds();
+            setCloud({
+              ...initialCloud,
+              configured: Boolean(tabCreds),
+              missing: tabCreds ? [] : initialCloud.missing,
+              offline: false,
+            });
+            if (tabCreds) setSelectedMode("live");
+            return;
+          }
+          throw new Error("API unavailable");
+        }
         const next: CloudStatus = await response.json();
         setCloud(next);
         if (next.cloud_agent_url || next.sandbox_id || next.dispatch_mode) {

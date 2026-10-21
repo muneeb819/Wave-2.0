@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+import { mintBrowserLiveKitSession } from "../src/browserToken";
 import { fullAgent, nodeAgent, quickstartAgent, snippet } from "../src/code";
 import { defaultConfig, readConfig } from "../src/types";
 
@@ -248,5 +249,33 @@ describe("Wave 2.0 Studio Workbench UI & Code Generation", () => {
     expect(within(dialog).getByLabelText("Bot dispatch mode")).toHaveValue(
       "cloud-bot",
     );
+  });
+
+  it("mints WebCrypto HS256 JWTs verified by official livekit.api.TokenVerifier for CA_tBWDFVRz7pZS", async () => {
+    const minted = await mintBrowserLiveKitSession(
+      {
+        livekitUrl: "wss://medicare-bot-z2uz9h17.livekit.cloud",
+        apiKey: "APItestKey123",
+        apiSecret: "super-secret-livekit-key-at-least-32-chars",
+      },
+      defaultConfig,
+      "CA_tBWDFVRz7pZS",
+    );
+    const verify = spawnSync(
+      "python",
+      [
+        "-c",
+        [
+          "import sys",
+          "from livekit import api",
+          "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
+          "claims = verifier.verify(sys.stdin.read().strip())",
+          "assert claims.video.room_join is True",
+          "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
+        ].join("\n"),
+      ],
+      { input: minted.participant_token },
+    );
+    expect(verify.status, verify.stderr.toString()).toBe(0);
   });
 });

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "python3 start.py || python start.py",
+    "e2b:proxy": "node scripts/e2b-traffic-proxy.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",

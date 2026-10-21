@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Room, Track } from "livekit-client";
 import {
+  mintBrowserLiveKitSession,
+  readSessionBrowserCreds,
+} from "./browserToken";
+import {
   defaultBotSettings,
   emptyMetrics,
   getModel,
@@ -306,30 +310,60 @@ export function useAgentSession(
           roomLabel =
             (details as { roomName?: string }).roomName || "cloud-room";
         } else {
-          const response = await fetch("/api/sessions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-            },
-            body: JSON.stringify({
-              config,
-              agent_name: targetAgentName,
-            }),
-            signal: abort.current.signal,
-          });
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(
-              typeof data.detail === "string"
-                ? data.detail
-                : data.detail?.message ||
-                    "The token service is unavailable. Start the Python API.",
-            );
+          let resolved = false;
+          try {
+            const response = await fetch("/api/sessions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(accessToken
+                  ? { Authorization: `Bearer ${accessToken}` }
+                  : {}),
+              },
+              body: JSON.stringify({
+                config,
+                agent_name: targetAgentName,
+              }),
+              signal: abort.current.signal,
+            });
+            if (response.ok) {
+              const data = await response.json();
+              serverUrl = data.server_url;
+              participantToken = data.participant_token;
+              roomLabel = data.room_name;
+              resolved = true;
+            } else if (response.status !== 404 && response.status !== 405) {
+              const data = await response.json();
+              const sessionCreds = readSessionBrowserCreds();
+              if (!sessionCreds) {
+                throw new Error(
+                  typeof data.detail === "string"
+                    ? data.detail
+                    : data.detail?.message ||
+                        "The token service is unavailable. Start the Python API.",
+                );
+              }
+            }
+          } catch (fetchErr) {
+            if (!readSessionBrowserCreds()) throw fetchErr;
           }
-          serverUrl = data.server_url;
-          participantToken = data.participant_token;
-          roomLabel = data.room_name;
+
+          if (!resolved) {
+            const sessionCreds = readSessionBrowserCreds();
+            if (!sessionCreds) {
+              throw new Error(
+                "Enter your LiveKit Sandbox ID or Project API Key & Secret in Bot settings first.",
+              );
+            }
+            const browserSession = await mintBrowserLiveKitSession(
+              sessionCreds,
+              config,
+              targetAgentName,
+            );
+            serverUrl = browserSession.server_url;
+            participantToken = browserSession.participant_token;
+            roomLabel = browserSession.room_name;
+          }
         }
 
         if (generation.current !== gen) return;

@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { Config, SdkKind, SessionMode } from "./types";
 import { copyText, downloadJSON, formatTime } from "./types";
+import { getStandaloneChromeUrl } from "./browserToken";
 import type { AgentSessionController } from "./useAgentSession";
 import {
   ChatAvatar,
@@ -76,10 +77,7 @@ export function Playground({
 
   const isEmbeddedIframe =
     typeof window !== "undefined" && window.self !== window.top;
-  const standaloneUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/?mode=live`
-      : "/?mode=live";
+  const standaloneUrl = getStandaloneChromeUrl();
 
   const stopMicTest = () => {
     if (micRafRef.current !== null) {

@@ -12,6 +12,7 @@ import {
   Cloud,
   Code2,
   CornerDownLeft,
+  ExternalLink,
   MessageSquare,
   Mic,
   MicOff,
@@ -21,7 +22,7 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import type { Config, SessionMode } from "./types";
+import type { Config, SdkKind, SessionMode } from "./types";
 import { copyText, downloadJSON, formatTime } from "./types";
 import type { AgentSessionController } from "./useAgentSession";
 import {
@@ -61,14 +62,90 @@ export function Playground({
   onToast: (message: string) => void;
 }) {
   const [tab, setTab] = useState<"conversation" | "events">("conversation");
+  const [sdk, setSdk] = useState<SdkKind>("python");
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [micTesting, setMicTesting] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micLabel, setMicLabel] = useState("");
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micAudioCtxRef = useRef<AudioContext | null>(null);
+  const micRafRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const isEmbeddedIframe =
+    typeof window !== "undefined" && window.self !== window.top;
+  const standaloneUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/?mode=live`
+      : "/?mode=live";
+
+  const stopMicTest = () => {
+    if (micRafRef.current !== null) {
+      cancelAnimationFrame(micRafRef.current);
+      micRafRef.current = null;
+    }
+    micStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+    void micAudioCtxRef.current?.close();
+    micAudioCtxRef.current = null;
+    setMicTesting(false);
+    setMicLevel(0);
+  };
+
+  useEffect(() => {
+    if (session.active && micTesting) stopMicTest();
+  }, [session.active, micTesting]);
+
+  useEffect(() => () => stopMicTest(), []);
+
+  async function toggleMicTest() {
+    if (micTesting) {
+      stopMicTest();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      onToast(
+        "Chrome blocks microphone inside embedded frames — click 'Open in New Chrome Tab' first!",
+      );
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      const trackLabel = stream.getAudioTracks()[0]?.label || "Chrome Microphone";
+      setMicLabel(trackLabel);
+      const ctx = new AudioContext();
+      micAudioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const buffer = new Uint8Array(analyser.frequencyBinCount);
+      setMicTesting(true);
+      onToast(`Microphone ready: ${trackLabel}`);
+      const tick = () => {
+        analyser.getByteFrequencyData(buffer);
+        const avg = buffer.reduce((sum, val) => sum + val, 0) / buffer.length;
+        setMicLevel(Math.min(100, Math.round(avg * 1.9)));
+        micRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      onToast(
+        isEmbeddedIframe
+          ? "Embedded preview blocked mic — click 'Open in New Chrome Tab' to use your Chrome microphone!"
+          : "Microphone blocked — click the lock/tune icon in your Chrome address bar and Allow Microphone.",
+      );
+    }
+  }
+
   useEffect(() => {
     if (scrollRef.current)
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [session.messages, session.logs, session.partial, tab]);
+
   useEffect(() => {
     if (
       session.active &&
@@ -77,17 +154,20 @@ export function Playground({
     )
       inputRef.current?.focus({ preventScroll: true });
   }, [session.active, session.state]);
+
   const canSend =
     session.active &&
     !["connecting", "thinking", "reconnecting"].includes(session.state);
+
   const estimate =
     session.metrics.llm_ms !== null &&
-    session.metrics.tts_ms !== null &&
-    session.metrics.endpointing_ms !== null
+    session.metrics.endpointing_ms !== null &&
+    (config.pipeline === "realtime" || session.metrics.tts_ms !== null)
       ? session.metrics.llm_ms +
-        session.metrics.tts_ms +
+        (session.metrics.tts_ms ?? 0) +
         session.metrics.endpointing_ms
       : null;
+
   const stage =
     session.mode === "demo" && session.active
       ? session.state === "speaking"
@@ -98,12 +178,17 @@ export function Playground({
             ? "Simulating the pipeline"
             : stateLabels[session.state]
       : stateLabels[session.state];
+
   async function copy() {
     try {
-      await copyText(snippet(config));
+      await copyText(snippet(config, sdk));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      onToast("Python configuration copied.");
+      onToast(
+        sdk === "python"
+          ? "Python configuration copied."
+          : "Node.js configuration copied.",
+      );
     } catch (error) {
       onToast((error as Error).message);
     }
@@ -197,10 +282,46 @@ export function Playground({
                 </button>
               </>
             ) : (
-              <span className="tester-idle-dot" />
+              <div className="idle-mic-tools">
+                <button
+                  type="button"
+                  className={`mic-test-btn ${micTesting ? "active" : ""}`}
+                  onClick={() => void toggleMicTest()}
+                  title="Test your Chrome microphone input before starting a call"
+                >
+                  <Mic />
+                  <span>{micTesting ? "Stop mic test" : "Test mic"}</span>
+                  {micTesting && (
+                    <span className="mic-meter" aria-hidden="true">
+                      <span style={{ width: `${Math.max(8, micLevel)}%` }} />
+                    </span>
+                  )}
+                </button>
+                {isEmbeddedIframe && (
+                  <a
+                    href={standaloneUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="open-tab-chip"
+                    title="Open in a full standalone Chrome tab to unlock microphone permissions"
+                  >
+                    <span>Open in Chrome Tab</span>
+                    <ExternalLink />
+                  </a>
+                )}
+              </div>
             )}
           </div>
         </div>
+        {micTesting && micLabel && (
+          <div className="mic-ready-strip">
+            <Mic />
+            <span>
+              Chrome mic active: <strong>{micLabel}</strong> — speak now to check
+              your level, then click <strong>Start session</strong>.
+            </span>
+          </div>
+        )}
         <div
           className="conversation-area"
           ref={scrollRef}
@@ -242,7 +363,7 @@ export function Playground({
                   </h3>
                   <p>
                     {selectedMode === "live"
-                      ? "Joining your room and waiting for the Python worker."
+                      ? "Joining your room and dispatching the LiveKit agent worker."
                       : "Preparing a local, text-only demonstration."}
                   </p>
                 </>
@@ -392,7 +513,7 @@ export function Playground({
             />
             {selectedMode === "demo"
               ? "Demo mode · Scripted replies · No audio captured"
-              : "Live mode · Real microphone and model requests"}
+              : `Live mode · ${config.pipeline === "realtime" ? "Speech-to-speech realtime" : "Chained STT → LLM → TTS"}`}
           </span>
           {session.messages.length > 0 && (
             <button
@@ -402,6 +523,7 @@ export function Playground({
               onClick={() =>
                 downloadJSON("inference-transcript.json", {
                   mode: session.mode,
+                  pipeline: config.pipeline,
                   messages: session.messages,
                   metrics: session.metrics,
                 })
@@ -417,14 +539,19 @@ export function Playground({
             {session.mode === "demo"
               ? "ILLUSTRATIVE METRICS"
               : "LIVE SDK METRICS"}
-            <span title="Transcription delay, LLM time to first token, TTS time to first byte, and an estimated sum of end-of-turn + LLM + TTS delays.">
+            <span title="Transcription delay, model time to first token, TTS time to first byte, and estimated end-of-turn pipeline latency.">
               <CircleHelp />
             </span>
           </div>
           <div className="metric-values">
             {[
               ["Transcription", session.metrics.transcription_ms],
-              ["LLM first token", session.metrics.llm_ms],
+              [
+                config.pipeline === "realtime"
+                  ? "Realtime TTFT"
+                  : "LLM first token",
+                session.metrics.llm_ms,
+              ],
               ["TTS first byte", session.metrics.tts_ms],
               ["Pipeline estimate", estimate],
             ].map(([label, value]) => (
@@ -443,7 +570,7 @@ export function Playground({
           </div>
         </div>
       </section>
-      <section className="code-panel panel" aria-label="Python quick start">
+      <section className="code-panel panel" aria-label="Quick start code">
         <div className="panel-heading">
           <h2>
             <span className="heading-icon">
@@ -452,22 +579,36 @@ export function Playground({
             Your stack in code
           </h2>
           <div className="code-toolbar">
-            <span className="language-pill">
-              <span />
-              Python
-            </span>
+            <div className="mode-switch sdk-switch" aria-label="SDK language">
+              <button
+                type="button"
+                className={sdk === "python" ? "selected" : ""}
+                onClick={() => setSdk("python")}
+                aria-pressed={sdk === "python"}
+              >
+                Python
+              </button>
+              <button
+                type="button"
+                className={sdk === "node" ? "selected" : ""}
+                onClick={() => setSdk("node")}
+                aria-pressed={sdk === "node"}
+              >
+                Node.js
+              </button>
+            </div>
             <CopyButton onClick={() => void copy()} copied={copied} />
           </div>
         </div>
         <div className="code-filename">
           <Braces />
-          <span>agent.py</span>
+          <span>{sdk === "python" ? "agent.py" : "src/main.ts"}</span>
           <span className="code-sync-indicator">
             <Check />
-            Synced with your models
+            Synced with your {config.pipeline === "realtime" ? "realtime model" : "models"}
           </span>
         </div>
-        <CodeBlock code={snippet(config)} lineNumbers compact />
+        <CodeBlock code={snippet(config, sdk)} lineNumbers compact />
         <div className="code-panel-note">
           <ShieldNote />
           <p>

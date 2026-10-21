@@ -1,13 +1,30 @@
 {
   "defaults": {
-    "stt": "xai/stt-1",
+    "pipeline": "stt-llm-tts",
+    "stt": "assemblyai/universal-3-6-pro",
     "llm": "google/gemma-4-31b-it",
     "tts": "fishaudio/s2.1-pro",
-    "language": "en",
     "voice": "fa4c9eb3dccc4806b382b40d61c6b10a",
-    "instructions": "You are a helpful voice AI assistant. Be warm, curious, and concise. Give clear, conversational answers, usually in two or three sentences. Avoid markdown, emojis, and complex formatting because your replies are spoken aloud."
+    "realtime_model": "openai/gpt-realtime-2.1",
+    "realtime_voice": "marin",
+    "language": "en",
+    "turn_detection": "turn_detector",
+    "noise_cancellation": true,
+    "preemptive_generation": true,
+    "expressive": true,
+    "keyterms": ["LiveKit", "Wave 2.0"],
+    "instructions": "You are a helpful voice AI assistant. You eagerly assist users with their questions by providing information from your extensive knowledge. Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols. You are curious, friendly, and have a sense of humor."
   },
   "stt": [
+    {
+      "id": "assemblyai/universal-3-6-pro",
+      "provider": "AssemblyAI",
+      "name": "Universal 3.6 Pro",
+      "mark": "assembly",
+      "languages": ["en", "es", "fr", "de", "pt", "it"],
+      "note": "High-accuracy streaming speech recognition via LiveKit Inference",
+      "tag": "RECOMMENDED"
+    },
     {
       "id": "xai/stt-1",
       "provider": "xAI",
@@ -16,6 +33,15 @@
       "languages": ["en", "es", "fr", "de", "pt", "it"],
       "note": "Streaming transcription via LiveKit Inference",
       "tag": "STREAMING"
+    },
+    {
+      "id": "deepgram/nova-3",
+      "provider": "Deepgram",
+      "name": "Nova 3",
+      "mark": "deepgram",
+      "languages": ["en", "es", "fr", "de", "pt", "it"],
+      "note": "Multilingual speech recognition",
+      "tag": "MULTILINGUAL"
     },
     {
       "id": "deepgram/flux-general",
@@ -36,22 +62,13 @@
       "tag": "TURN-AWARE"
     },
     {
-      "id": "deepgram/nova-3",
-      "provider": "Deepgram",
-      "name": "Nova 3",
-      "mark": "deepgram",
+      "id": "cartesia/ink-whisper",
+      "provider": "Cartesia",
+      "name": "Ink Whisper",
+      "mark": "cartesia",
       "languages": ["en", "es", "fr", "de", "pt", "it"],
-      "note": "Multilingual speech recognition",
-      "tag": "MULTILINGUAL"
-    },
-    {
-      "id": "assemblyai/universal-3-6-pro",
-      "provider": "AssemblyAI",
-      "name": "Universal 3.6 Pro",
-      "mark": "assembly",
-      "languages": ["en", "es", "fr", "de", "pt", "it"],
-      "note": "Streaming speech recognition",
-      "tag": "STREAMING"
+      "note": "Fast conversational transcription",
+      "tag": "LOW LATENCY"
     }
   ],
   "llm": [
@@ -86,6 +103,14 @@
       "mark": "google",
       "note": "Efficient conversational intelligence",
       "tag": "EFFICIENT"
+    },
+    {
+      "id": "xai/grok-4-1-fast-non-reasoning",
+      "provider": "xAI",
+      "name": "Grok 4.1 Fast",
+      "mark": "xai",
+      "note": "Low-latency conversational model",
+      "tag": "FAST"
     }
   ],
   "tts": [
@@ -104,7 +129,78 @@
       "mark": "fish",
       "note": "Multilingual voice synthesis",
       "tag": "MULTILINGUAL"
+    },
+    {
+      "id": "cartesia/sonic-3",
+      "provider": "Cartesia",
+      "name": "Sonic 3",
+      "mark": "cartesia",
+      "note": "Ultra-low-latency streaming voice",
+      "tag": "LOW LATENCY"
+    },
+    {
+      "id": "deepgram/aura-2",
+      "provider": "Deepgram",
+      "name": "Aura 2",
+      "mark": "deepgram",
+      "note": "Clear enterprise speech synthesis",
+      "tag": "STREAMING"
     }
+  ],
+  "realtime": [
+    {
+      "id": "openai/gpt-realtime-2.1",
+      "provider": "OpenAI",
+      "name": "GPT Realtime 2.1",
+      "mark": "openai",
+      "note": "Expressive speech-to-speech realtime model via LiveKit Inference",
+      "tag": "SPEECH-TO-SPEECH"
+    },
+    {
+      "id": "openai/gpt-realtime-2.1-mini",
+      "provider": "OpenAI",
+      "name": "GPT Realtime 2.1 Mini",
+      "mark": "openai",
+      "note": "Compact low-latency speech-to-speech realtime model",
+      "tag": "COMPACT"
+    },
+    {
+      "id": "openai/gpt-live-1",
+      "provider": "OpenAI",
+      "name": "GPT-Live 1",
+      "mark": "openai",
+      "note": "Full-duplex conversational voice model via LiveKit Inference",
+      "tag": "FULL DUPLEX"
+    },
+    {
+      "id": "google/gemini-3.8-live",
+      "provider": "Google",
+      "name": "Gemini 3.8 Live",
+      "mark": "google",
+      "note": "Native multimodal speech-to-speech model",
+      "tag": "LIVE AUDIO"
+    },
+    {
+      "id": "xai/grok-voice-3.0",
+      "provider": "xAI",
+      "name": "Grok Voice 3.0",
+      "mark": "xai",
+      "note": "Realtime conversational voice model",
+      "tag": "REALTIME"
+    }
+  ],
+  "realtime_voices": [
+    { "id": "marin", "name": "Marin (Default)" },
+    { "id": "cedar", "name": "Cedar" },
+    { "id": "alloy", "name": "Alloy" },
+    { "id": "ash", "name": "Ash" },
+    { "id": "ballad", "name": "Ballad" },
+    { "id": "coral", "name": "Coral" },
+    { "id": "echo", "name": "Echo" },
+    { "id": "sage", "name": "Sage" },
+    { "id": "shimmer", "name": "Shimmer" },
+    { "id": "verse", "name": "Verse" },
+    { "id": "eve", "name": "Eve (xAI)" }
   ],
   "languages": [
     {

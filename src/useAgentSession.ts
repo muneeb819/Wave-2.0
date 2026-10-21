@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Room } from "livekit-client";
-import { emptyMetrics, getModel, uid } from "./types";
+import type { Room, Track } from "livekit-client";
+import {
+  defaultBotSettings,
+  emptyMetrics,
+  getModel,
+  resolveDispatchAgentName,
+  uid,
+} from "./types";
 import type {
   AgentState,
+  BotSettings,
   Config,
   EventLog,
   HistoryEntry,
@@ -16,16 +23,22 @@ const validStates = ["listening", "thinking", "speaking"] as const;
 function demoReply(text: string, config: Config) {
   const lower = text.toLowerCase();
   if (/hello|hi\b|hey\b/.test(lower))
-    return "Hey! Good to meet you. This is a local demo of your voice agent. What would you like to know about the inference pipeline?";
+    return config.pipeline === "realtime"
+      ? `Hey! Good to meet you. This is a local demo of your ${getModel("realtime", config.realtime_model).name} speech-to-speech pipeline. What would you like to explore?`
+      : "Hey! Good to meet you. This is a local demo of your voice agent. What would you like to know about the inference pipeline?";
   if (/weather|time|news|today/.test(lower))
-    return "I'm a local demo, so I can't check live information. Connect LiveKit Cloud and start the Python worker to ask your actual agent. You can customize its behavior in the system instructions.";
-  if (/code|python|build|start|connect|setup/.test(lower))
-    return "Add your LiveKit Cloud credentials to .env.local, start the API and Python agent worker, then switch this playground to Live. The Get code button exports your current model configuration as a runnable Python agent.";
+    return "I'm a local demo, so I can't check live information yet. In Live mode, your LiveKit Cloud bot executes tools directly on LiveKit Cloud.";
+  if (/code|python|node|build|start|connect|setup/.test(lower))
+    return "Connect your LiveKit Cloud project (API keys or Sandbox ID) in Configuration, then switch this playground to Live to speak directly with your bot.";
   if (/voice|fish|speech|sound/.test(lower))
-    return `Your text-to-speech model is ${getModel("tts", config.tts).name} from Fish Audio. In Live mode it streams the agent's reply as audio. You can use the configured voice or add your own Fish Audio voice ID.`;
-  if (/model|pipeline|inference|work|latency|livekit/.test(lower))
-    return `In a live session, ${getModel("stt", config.stt).name} transcribes your speech, ${getModel("llm", config.llm).name} generates a reply, and ${getModel("tts", config.tts).name} turns it into audio. LiveKit Inference connects all three with one set of Cloud credentials.`;
-  return "That's a good prompt for your agent. This demo uses scripted replies rather than a live language model. Switch to Live once your Cloud credentials and Python worker are ready to get a real, spoken response.";
+    return config.pipeline === "realtime"
+      ? `Your speech-to-speech model ${getModel("realtime", config.realtime_model).name} streams native audio directly with voice "${config.realtime_voice}" without a separate TTS hop.`
+      : `Your text-to-speech model is ${getModel("tts", config.tts).name} (${getModel("tts", config.tts).provider}). With expressive mode enabled, LiveKit Inference renders natural tone and pacing automatically.`;
+  if (/model|pipeline|inference|work|latency|livekit|realtime/.test(lower))
+    return config.pipeline === "realtime"
+      ? `In Realtime mode, ${getModel("realtime", config.realtime_model).name} processes your spoken audio directly end-to-end speech-to-speech through LiveKit Inference with ${config.noise_cancellation ? "ai-coustics QUAIL VF-S noise cancellation" : "direct audio input"}.`
+      : `In a live session, ${getModel("stt", config.stt).name} transcribes your speech, ${getModel("llm", config.llm).name} generates a reply, and ${getModel("tts", config.tts).name} turns it into audio with LiveKit TurnDetector and ${config.noise_cancellation ? "ai-coustics noise cancellation" : "local audio input"}.`;
+  return "That's a great prompt for your agent. This demo uses scripted replies rather than a live model. Switch to Live once your Cloud credentials are saved to talk directly with your bot.";
 }
 
 function loadHistory(): HistoryEntry[] {
@@ -39,7 +52,10 @@ function loadHistory(): HistoryEntry[] {
   }
 }
 
-export function useAgentSession(config: Config) {
+export function useAgentSession(
+  config: Config,
+  botSettings: BotSettings = defaultBotSettings,
+) {
   const [state, setState] = useState<AgentState>("idle");
   const [mode, setMode] = useState<SessionMode>("demo");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -51,6 +67,7 @@ export function useAgentSession(config: Config) {
   const [error, setError] = useState("");
   const [partial, setPartial] = useState("");
   const [needsAudio, setNeedsAudio] = useState(false);
+
   const roomRef = useRef<Room | null>(null);
   const audioElements = useRef<HTMLMediaElement[]>([]);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -60,6 +77,8 @@ export function useAgentSession(config: Config) {
   const running = useRef(false);
   const connected = useRef(false);
   const startedAt = useRef(0);
+  const lastUserTurnAt = useRef(0);
+  const customEventsSeen = useRef(false);
   const sessionMode = useRef<SessionMode>("demo");
   const sessionConfig = useRef<Config>(config);
   const messagesRef = useRef<Message[]>([]);
@@ -76,6 +95,7 @@ export function useAgentSession(config: Config) {
       /* Browser storage may be disabled/full. */
     }
   }, [history]);
+
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(
@@ -98,9 +118,16 @@ export function useAgentSession(config: Config) {
     [],
   );
 
-  const addMessage = useCallback((message: Message) => {
+  const upsertMessage = useCallback((message: Message) => {
     setMessages((current) => {
-      if (current.some((item) => item.id === message.id)) return current;
+      const existingIdx = current.findIndex((item) => item.id === message.id);
+      if (existingIdx >= 0) {
+        const next = current.map((item, idx) =>
+          idx === existingIdx ? { ...item, ...message } : item,
+        );
+        messagesRef.current = next;
+        return next;
+      }
       const optimistic =
         message.role === "user"
           ? current.findIndex(
@@ -129,49 +156,52 @@ export function useAgentSession(config: Config) {
     });
   }, []);
 
+  const detachAudio = useCallback(() => {
+    audioElements.current.forEach((element) => {
+      element.pause();
+      element.srcObject = null;
+      element.remove();
+    });
+    audioElements.current = [];
+  }, []);
+
   const stop = useCallback(
     (reason?: string) => {
       if (!running.current) return;
       running.current = false;
       generation.current += 1;
       abort.current?.abort();
+      abort.current = null;
       timers.current.forEach(clearTimeout);
       timers.current = [];
       const room = roomRef.current;
       roomRef.current = null;
-      if (room) {
-        room.removeAllListeners();
-        void room.disconnect();
-      }
-      audioElements.current.forEach((element) => element.remove());
-      audioElements.current = [];
-      setState("ended");
-      setPartial("");
-      setNeedsAudio(false);
-      const duration = Math.max(
-        0,
-        Math.floor((Date.now() - startedAt.current) / 1000),
-      );
-      setElapsed(duration);
-      if (connected.current) {
+      void room?.disconnect();
+      detachAudio();
+      if (connected.current || messagesRef.current.length > 0) {
         const entry: HistoryEntry = {
           id: uid(),
           mode: sessionMode.current,
           startedAt: startedAt.current,
-          duration,
-          config: { ...sessionConfig.current },
-          messages: [...messagesRef.current],
-          metrics: { ...metricsRef.current },
+          duration: Math.max(
+            1,
+            Math.floor((Date.now() - startedAt.current) / 1000),
+          ),
+          config: sessionConfig.current,
+          messages: messagesRef.current,
+          metrics: metricsRef.current,
         };
         setHistory((current) => [entry, ...current].slice(0, 20));
       }
-      connected.current = false;
+      setPartial("");
+      setNeedsAudio(false);
+      setState("ended");
       log(
         reason || "Session ended. Microphone and room disconnected.",
         reason ? "warning" : "info",
       );
     },
-    [log],
+    [detachAudio, log],
   );
 
   useEffect(
@@ -181,9 +211,9 @@ export function useAgentSession(config: Config) {
       abort.current?.abort();
       timers.current.forEach(clearTimeout);
       void roomRef.current?.disconnect();
-      audioElements.current.forEach((element) => element.remove());
+      detachAudio();
     },
-    [],
+    [detachAudio],
   );
 
   const start = useCallback(
@@ -191,11 +221,13 @@ export function useAgentSession(config: Config) {
       if (running.current) return;
       running.current = true;
       connected.current = false;
+      customEventsSeen.current = false;
       const gen = ++generation.current;
       turn.current = 0;
       sessionMode.current = selectedMode;
-      sessionConfig.current = { ...config };
+      sessionConfig.current = { ...config, keyterms: [...config.keyterms] };
       startedAt.current = Date.now();
+      lastUserTurnAt.current = Date.now();
       messagesRef.current = [];
       metricsRef.current = { ...emptyMetrics };
       setMessages([]);
@@ -207,6 +239,7 @@ export function useAgentSession(config: Config) {
       setMuted(false);
       setMode(selectedMode);
       setState("connecting");
+
       const later = (fn: () => void, ms: number) => {
         const timer = setTimeout(() => {
           if (generation.current === gen && running.current) fn();
@@ -224,52 +257,84 @@ export function useAgentSession(config: Config) {
           connected.current = true;
           if (turn.current !== 0) return;
           setState("speaking");
-          log("Simulated pipeline ready.", "success");
-          addMessage({
+          log(
+            config.pipeline === "realtime"
+              ? `Simulated Realtime (${getModel("realtime", config.realtime_model).name}) pipeline ready.`
+              : "Simulated STT → LLM → TTS pipeline ready.",
+            "success",
+          );
+          upsertMessage({
             id: uid(),
             role: "assistant",
-            text: "Hey there! You're in demo mode — no microphone or models are connected. Send a message below to explore your voice pipeline.",
+            text:
+              config.pipeline === "realtime"
+                ? `Hey there! You're previewing the ${getModel("realtime", config.realtime_model).name} speech-to-speech pipeline in demo mode — send a message below to explore how it works.`
+                : "Hey there! You're in demo mode — no microphone or models are connected. Send a message below to explore your voice pipeline.",
             timestamp: Date.now(),
           });
-        }, 650);
-        later(() => {
-          if (turn.current === 0) setState("listening");
-        }, 1700);
+          later(() => {
+            if (turn.current === 0) setState("listening");
+          }, 900);
+        }, 380);
         return;
       }
 
-      log("Requesting a short-lived room token…");
-      try {
-        if (!navigator.mediaDevices?.getUserMedia)
-          throw new Error(
-            "Microphone access requires HTTPS and a supported browser.",
-          );
+      const connectAttempt = async (
+        targetAgentName: string,
+        allowAutoFallback: boolean,
+      ): Promise<void> => {
         abort.current = new AbortController();
-        const response = await fetch("/api/sessions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({ config }),
-          signal: abort.current.signal,
-        });
-        const data = await response.json();
-        if (!response.ok)
-          throw new Error(
-            typeof data.detail === "string"
-              ? data.detail
-              : data.detail?.message ||
-                  "The token service is unavailable. Start the Python API.",
+        const lk = await import("livekit-client");
+        if (generation.current !== gen) return;
+
+        let serverUrl = "";
+        let participantToken = "";
+        let roomLabel = "";
+
+        if (botSettings.sandboxId.trim()) {
+          log(
+            `Fetching LiveKit Sandbox credentials (${botSettings.sandboxId.trim()})${targetAgentName ? ` for agent ${targetAgentName}` : " (automatic dispatch)"}…`,
           );
+          const tokenSource = lk.TokenSource.developmentTokenServer(
+            botSettings.sandboxId.trim(),
+          );
+          const details = await tokenSource.fetch(
+            targetAgentName ? { agentName: targetAgentName } : {},
+          );
+          serverUrl = details.serverUrl;
+          participantToken = details.participantToken;
+          roomLabel =
+            (details as { roomName?: string }).roomName || "cloud-room";
+        } else {
+          const response = await fetch("/api/sessions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
+            body: JSON.stringify({
+              config,
+              agent_name: targetAgentName,
+            }),
+            signal: abort.current.signal,
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(
+              typeof data.detail === "string"
+                ? data.detail
+                : data.detail?.message ||
+                    "The token service is unavailable. Start the Python API.",
+            );
+          }
+          serverUrl = data.server_url;
+          participantToken = data.participant_token;
+          roomLabel = data.room_name;
+        }
+
         if (generation.current !== gen) return;
-        const {
-          Room: LiveKitRoom,
-          RoomEvent,
-          Track,
-        } = await import("livekit-client");
-        if (generation.current !== gen) return;
-        const room = new LiveKitRoom({
+
+        const room = new lk.Room({
           adaptiveStream: true,
           dynacast: true,
           audioCaptureDefaults: {
@@ -280,38 +345,108 @@ export function useAgentSession(config: Config) {
         });
         roomRef.current = room;
         let agentReady = false;
-        const markReady = () => {
+        let switchingFallback = false;
+
+        const attachTrackElement = (track: Track) => {
+          const element = track.attach();
+          element.setAttribute("data-inference-audio", "true");
+          element.style.display = "none";
+          document.body.appendChild(element);
+          audioElements.current.push(element);
+          void room.startAudio().catch(() => setNeedsAudio(true));
+        };
+
+        const markReady = (participantIdentity?: string) => {
           if (!agentReady) {
             agentReady = true;
-            log("LiveKit agent joined. Voice pipeline is ready.", "success");
+            setState((prev) => (prev === "connecting" ? "listening" : prev));
+            log(
+              `Connected to LiveKit agent${participantIdentity ? ` (${participantIdentity})` : targetAgentName ? ` (${targetAgentName})` : ""}. Voice & chat ready.`,
+              "success",
+            );
           }
         };
+
+        room.on(lk.RoomEvent.ParticipantConnected, (participant) => {
+          if (participant.isAgent) {
+            markReady(participant.identity);
+            const attrState = participant.attributes?.["lk.agent.state"];
+            if (
+              attrState &&
+              validStates.includes(attrState as (typeof validStates)[number])
+            ) {
+              setState(attrState as AgentState);
+            }
+          }
+        });
+
         room.on(
-          RoomEvent.TrackSubscribed,
+          lk.RoomEvent.TrackSubscribed,
           (track, _publication, participant) => {
-            if (track.kind === Track.Kind.Audio && participant.isAgent) {
-              const element = track.attach();
-              element.setAttribute("data-inference-audio", "true");
-              element.style.display = "none";
-              document.body.appendChild(element);
-              audioElements.current.push(element);
-              void room.startAudio().catch(() => setNeedsAudio(true));
+            if (track.kind === lk.Track.Kind.Audio && participant.isAgent) {
+              markReady(participant.identity);
+              attachTrackElement(track);
             }
           },
         );
+
+        // Native LiveKit transcription stream support (works with ANY hosted Cloud Bot / Agent Builder `CA_...`!)
         room.on(
-          RoomEvent.DataReceived,
+          lk.RoomEvent.TranscriptionReceived,
+          (segments, participant) => {
+            if (customEventsSeen.current) return;
+            const isAgentSpeaker = Boolean(participant?.isAgent);
+            for (const segment of segments) {
+              const text = (segment.text || "").trim();
+              if (!text) continue;
+              if (isAgentSpeaker) {
+                markReady(participant?.identity);
+                if (lastUserTurnAt.current > 0) {
+                  const turnLatency = Math.round(
+                    Date.now() - lastUserTurnAt.current,
+                  );
+                  if (turnLatency > 0 && turnLatency < 30000) {
+                    updateMetrics({ llm_ms: turnLatency });
+                  }
+                  lastUserTurnAt.current = 0;
+                }
+                upsertMessage({
+                  id: `seg-${segment.id}`,
+                  role: "assistant",
+                  text,
+                  timestamp: segment.firstReceivedTime || Date.now(),
+                });
+              } else if (!segment.final) {
+                setPartial(text);
+              } else {
+                setPartial("");
+                lastUserTurnAt.current = Date.now();
+                upsertMessage({
+                  id: `seg-${segment.id}`,
+                  role: "user",
+                  text,
+                  timestamp: segment.firstReceivedTime || Date.now(),
+                });
+              }
+            }
+          },
+        );
+
+        // Optional rich Studio worker telemetry (`backend/agent.py`)
+        room.on(
+          lk.RoomEvent.DataReceived,
           (payload, participant, _kind, topic) => {
             if (topic !== "inference.events" || !participant?.isAgent) return;
+            customEventsSeen.current = true;
             try {
               const event = JSON.parse(new TextDecoder().decode(payload));
               if (event.type === "ready") {
-                markReady();
+                markReady(participant.identity);
                 setState("listening");
               }
               if (event.type === "state") {
                 if (validStates.includes(event.state)) {
-                  markReady();
+                  markReady(participant.identity);
                   setState(event.state);
                   log(`Agent is ${event.state}.`);
                 }
@@ -323,7 +458,7 @@ export function useAgentSession(config: Config) {
                 typeof event.text === "string" &&
                 ["user", "assistant"].includes(event.role)
               ) {
-                addMessage({
+                upsertMessage({
                   id: event.id || uid(),
                   role: event.role,
                   text: event.text,
@@ -359,83 +494,155 @@ export function useAgentSession(config: Config) {
             }
           },
         );
+
         room.on(
-          RoomEvent.ParticipantAttributesChanged,
+          lk.RoomEvent.ParticipantAttributesChanged,
           (attributes, participant) => {
             if (participant.isAgent && attributes["lk.agent.state"]) {
               const nextState = attributes["lk.agent.state"];
               if (
                 validStates.includes(nextState as (typeof validStates)[number])
               ) {
-                markReady();
+                markReady(participant.identity);
                 setState(nextState as AgentState);
               }
             }
           },
         );
-        room.on(RoomEvent.AudioPlaybackStatusChanged, () =>
+
+        room.on(lk.RoomEvent.AudioPlaybackStatusChanged, () =>
           setNeedsAudio(!room.canPlaybackAudio),
         );
-        room.on(RoomEvent.Reconnecting, () => {
+        room.on(lk.RoomEvent.Reconnecting, () => {
           setState("reconnecting");
           log("Connection interrupted. Reconnecting…", "warning");
         });
-        room.on(RoomEvent.Reconnected, () => {
+        room.on(lk.RoomEvent.Reconnected, () => {
           setState("listening");
           log("Room connection restored.", "success");
         });
-        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-          if (participant.isAgent && running.current) {
+        room.on(lk.RoomEvent.ParticipantDisconnected, (participant) => {
+          if (participant.isAgent && running.current && !switchingFallback) {
             setError(
-              "The agent disconnected. Check the Python worker logs, then start another session.",
+              "The agent left the room. Start another session when ready.",
             );
             stop("Agent disconnected.");
           }
         });
-        room.on(RoomEvent.Disconnected, () => {
-          if (running.current) stop("Room connection closed.");
+        room.on(lk.RoomEvent.Disconnected, () => {
+          if (running.current && !switchingFallback) {
+            stop("Room connection closed.");
+          }
         });
-        log(`Connecting to room ${data.room_name}…`);
-        await room.connect(data.server_url, data.participant_token);
+
+        log(
+          `Connecting to room ${roomLabel}${targetAgentName ? ` → dispatching ${targetAgentName}` : " → automatic cloud dispatch"}…`,
+        );
+        await room.connect(serverUrl, participantToken);
         if (generation.current !== gen) {
           await room.disconnect();
           return;
         }
         connected.current = true;
         log("WebRTC room connected.", "success");
-        await room.localParticipant.setMicrophoneEnabled(true);
-        if (generation.current !== gen) {
-          await room.disconnect();
+
+        // Check if the Cloud Agent already joined during the handshake!
+        for (const remote of room.remoteParticipants.values()) {
+          if (remote.isAgent) {
+            markReady(remote.identity);
+            const attrState = remote.attributes?.["lk.agent.state"];
+            if (
+              attrState &&
+              validStates.includes(attrState as (typeof validStates)[number])
+            ) {
+              setState(attrState as AgentState);
+            }
+            for (const pub of remote.audioTrackPublications.values()) {
+              if (pub.track) attachTrackElement(pub.track);
+            }
+          }
+        }
+
+        // Enable microphone cleanly — if blocked (e.g. iframe preview or no mic plugged in), stay live for audio playback + text chat!
+        if (typeof navigator.mediaDevices?.getUserMedia === "function") {
+          try {
+            await room.localParticipant.setMicrophoneEnabled(true);
+            log("Microphone enabled and streaming.");
+          } catch (micErr) {
+            setMuted(true);
+            const name = micErr instanceof Error ? micErr.name : "";
+            log(
+              name === "NotAllowedError"
+                ? "Microphone blocked by browser/iframe — connected in listen + live text chat mode (open in a standalone browser tab for voice mic)."
+                : "No microphone detected — connected in listen + live text chat mode.",
+              "warning",
+            );
+          }
+        } else {
+          setMuted(true);
+          log(
+            "Browser microphone unavailable — connected in listen + live text chat mode.",
+            "warning",
+          );
+        }
+
+        void room.startAudio().catch(() => setNeedsAudio(true));
+
+        if (allowAutoFallback && targetAgentName) {
+          later(() => {
+            if (!agentReady && running.current && generation.current === gen) {
+              switchingFallback = true;
+              log(
+                `No explicit worker answered "${targetAgentName}" in 7s — automatically switching to LiveKit Cloud automatic dispatch…`,
+                "warning",
+              );
+              detachAudio();
+              roomRef.current = null;
+              void room.disconnect().finally(() => {
+                if (running.current && generation.current === gen) {
+                  void connectAttempt("", false).catch((err: unknown) => {
+                    const msg =
+                      err instanceof Error
+                        ? err.message
+                        : "Automatic dispatch retry failed.";
+                    setError(msg);
+                    log(msg, "error");
+                    stop("Could not reach Cloud agent.");
+                  });
+                }
+              });
+            }
+          }, 7000);
           return;
         }
-        log("Microphone enabled. Waiting for the Python agent…");
-        void room.startAudio().catch(() => setNeedsAudio(true));
+
         later(() => {
           if (!agentReady) {
             setError(
-              "No agent joined. Run python -m backend.agent dev with the same LiveKit project and dispatch name: inference-studio.",
+              `No agent joined the room. Verify your bot (${botSettings.botUrl}) is deployed and running in LiveKit Cloud, or run python -m backend.agent dev locally.`,
             );
-            stop("Timed out waiting for the Python worker.");
+            stop("Timed out waiting for the LiveKit agent.");
           }
-        }, 25000);
+        }, 20000);
+      };
+
+      try {
+        const primaryTarget = resolveDispatchAgentName(botSettings);
+        const allowFallback =
+          botSettings.dispatchMode === "cloud-bot" && Boolean(primaryTarget);
+        await connectAttempt(primaryTarget, allowFallback);
       } catch (caught) {
         if (generation.current !== gen) return;
         const issue =
           caught instanceof Error
             ? caught
-            : new Error("Unable to start the voice session.");
-        const message =
-          issue.name === "NotAllowedError"
-            ? "Microphone permission was denied. Allow microphone access in your browser and try again."
-            : issue.name === "NotFoundError"
-              ? "No microphone was found. Connect an audio input device and try again."
-              : issue.message;
-        setError(message);
-        log(message, "error");
+            : new Error("Unable to start the live session.");
+        setError(issue.message);
+        log(issue.message, "error");
         stop("Session could not be started.");
       }
     },
-    [config, log, addMessage, updateMetrics, stop],
+    [config, botSettings, detachAudio, log, upsertMessage, updateMetrics, stop],
   );
 
   const sendText = useCallback(
@@ -453,7 +660,8 @@ export function useAgentSession(config: Config) {
         setError("Messages can be up to 2,000 characters.");
         return false;
       }
-      addMessage({
+      lastUserTurnAt.current = Date.now();
+      upsertMessage({
         id: uid(),
         role: "user",
         text: value,
@@ -461,25 +669,36 @@ export function useAgentSession(config: Config) {
         pending: sessionMode.current === "live",
       });
       if (sessionMode.current === "demo") {
-        const gen = generation.current;
         const currentTurn = ++turn.current;
+        const gen = generation.current;
         setState("thinking");
-        log("Simulated STT → LLM → TTS request.");
+        log("Demo turn queued — generating scripted response.");
+        const isRealtime = sessionConfig.current.pipeline === "realtime";
         const replyTimer = setTimeout(() => {
           if (
             generation.current !== gen ||
-            currentTurn !== turn.current ||
+            turn.current !== currentTurn ||
             !running.current
           )
             return;
-          updateMetrics({
-            transcription_ms: 94,
-            endpointing_ms: 122,
-            llm_ms: 218,
-            tts_ms: 146,
-            tokens: 128,
-          });
-          addMessage({
+          updateMetrics(
+            isRealtime
+              ? {
+                  transcription_ms: 95,
+                  endpointing_ms: 140,
+                  llm_ms: 195,
+                  tts_ms: 0,
+                  tokens: 52,
+                }
+              : {
+                  transcription_ms: 142,
+                  endpointing_ms: 180,
+                  llm_ms: 218,
+                  tts_ms: 164,
+                  tokens: 46,
+                },
+          );
+          upsertMessage({
             id: uid(),
             role: "assistant",
             text: demoReply(value, sessionConfig.current),
@@ -507,7 +726,7 @@ export function useAgentSession(config: Config) {
         await roomRef.current?.localParticipant.sendText(value, {
           topic: "lk.chat",
         });
-        log("Text message sent to agent.");
+        log("Text message sent to LiveKit bot (lk.chat).");
         return true;
       } catch {
         setError("Your message could not be sent. Check the room connection.");
@@ -515,7 +734,7 @@ export function useAgentSession(config: Config) {
         return false;
       }
     },
-    [state, addMessage, log, updateMetrics],
+    [state, upsertMessage, log, updateMetrics],
   );
 
   const toggleMute = useCallback(async () => {
@@ -527,7 +746,7 @@ export function useAgentSession(config: Config) {
       log(enabled ? "Microphone muted." : "Microphone unmuted.");
     } catch {
       setError(
-        "Microphone access could not be changed. Check your browser permissions.",
+        "Microphone access could not be changed. Allow microphone permissions in your browser (or open in a full tab).",
       );
     }
   }, [log]);
@@ -542,6 +761,7 @@ export function useAgentSession(config: Config) {
       );
     }
   }, []);
+
   return {
     state,
     mode,

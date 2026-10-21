@@ -1,0 +1,18 @@
+# Simulation scenarios for Wave 2.0 Node.js Voice Assistant.
+# Run with: lk agent simulate text --scenarios scenarios.yaml
+id: SCNG_Wave2NodeStarter
+name: Wave 2.0 Node.js Voice Assistant
+scenarios:
+  - id: SCN_nodeGreeting
+    label: Greets user warmly and offers help
+    instructions: |
+      PERSONA: A first-time user who just connected.
+      OPENING LINE: "Hello!"
+      DO, IN ORDER:
+      1. Ask: "What can you help me with?"
+      2. Say thank you and end the conversation.
+    agent_expectations: >
+      Greets the user warmly and explains clearly what it can assist with in one
+      to three concise, natural spoken sentences without markdown or emojis.
+    tags:
+      feature: greeting

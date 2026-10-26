@@ -311,6 +311,9 @@ Placeholders only — no real secrets. Cloud project `p_jg0goo2oksb` / agent `CA
 | 1 | **Medium** | `tests/app.ui.test.tsx` JWT test used `spawnSync("python")` which fails when system Python has no `livekit` | Changed to `process.env.VITEST_PYTHON_BIN \|\| "uv"` → `["run","python","-c",…]` fallback | ✅ Fixed, 8/8 pass |
 | 2 | **Low** | `start.py` bound Vite/API to `127.0.0.1` — breaks E2B preview if using `start.py` directly | Changed to `"0.0.0.0"` in `resolve_vite_cmd()` and `api_proc` args | ✅ Fixed |
 | 3 | **Info** | No `.env.local` in fresh clone — `/api/sessions` returns 503 until credentials added | Documented in Launch Guide; Demo mode works without it | ℹ️ By design |
+| 4 | **High (CI)** | `verify.stderr.toString()` threw `TypeError: Cannot read properties of undefined (reading 'toString')` — `spawnSync` returns `stderr: null` when the binary cannot start (CI had no `uv`) | New `tests/pythonRunner.ts` resolver + failure describer; JWT test now verifies HMAC/claims with Node `crypto` and only cross-checks the official Python verifier when available | ✅ Fixed, 10/10 pass |
+| 5 | **Low** | Browser-minted JWT lacked `iat`/`jti`, so it differed from server-minted `livekit.api.AccessToken` claims | Added `iat`/`jti` to `src/browserToken.ts` (verified by the new claim assertions) | ✅ Fixed |
+| 6 | **Low** | Web CI job never installed Python/LiveKit, so the official `TokenVerifier` assertion could not run | `ci.yml` web job now sets up Python 3.12 + `livekit-api==1.2.2` and sets `VITEST_PYTHON_BIN=python` | ✅ Fixed |
 
 **No other issues found.** Build, lint, typecheck, and all Python tests pass clean.
 
@@ -430,8 +433,9 @@ pnpm run build               # Should rebuild dist/
 
 - [x] Dependencies installed (`uv sync` + `pnpm install`)
 - [x] Production build succeeds (`pnpm run build` → `dist/`)
-- [x] All Python tests pass (49/49)
-- [x] All frontend unit tests pass (8/8)
+- [x] All Python tests pass (49 passed, 1 skipped — live-inference judge)
+- [x] All frontend unit tests pass (10/10, including 1 official-verifier cross-check)
+- [x] Node.js agent starter: `pnpm typecheck` + `pnpm test` → 3/3 pass
 - [x] Lint & typecheck clean
 - [x] Backend health endpoint live (`/api/health`)
 - [x] Frontend studio live (`:5173` + proxy)
@@ -441,4 +445,55 @@ pnpm run build               # Should rebuild dist/
 
 ---
 
-*Audit finished. Both services are hot-reloading. Edit any file — Vite preserves state, Uvicorn auto-reloads on Python change.*
+## 14. Follow-up Round — CI `stderr.toString()` Crash (Resolved)
+
+**Reported error:**
+
+```
+TypeError: Cannot read properties of undefined (reading 'toString')
+ ❯ tests/app.ui.test.tsx:293:41
+    293|     expect(verify.status, verify.stderr.toString()).toBe(0);
+```
+
+**Root cause:** `spawnSync("uv", …)` on a CI runner where `uv` is not installed fails to start
+the process. Node returns `{ status: null, signal: null, stdout: null, stderr: null, error: Error ENOENT }`.
+Touching `result.stderr.toString()` therefore throws `TypeError` *before* the assertion can report
+anything useful — the test crashed instead of failing gracefully.
+
+**Fixes shipped:**
+
+1. **`tests/pythonRunner.ts` (new, dependency-free)**
+   - `runPython(code, { input, requireModule })` probes interpreters in order:
+     `VITEST_PYTHON_BIN` → `.venv` python → `python3` → `python` → `uv run python`.
+   - `describeSpawnFailure(result)` safely converts `error` / `stderr` / `stdout` / status into a
+     message and never dereferences `null`.
+   - `hasPythonWith(module)` enables `it.skipIf(...)` for optional cross-checks.
+2. **`tests/app.ui.test.tsx`**
+   - New test *“mints room-scoped HS256 JWTs via WebCrypto with LiveKit-compatible claims”* verifies
+     the signature with `node:crypto` (`createHmac` + `timingSafeEqual`) and asserts `iss`, `sub`,
+     `jti`, `iat`/`nbf`/`exp` windows, `video.*` grants and `roomConfig.agents[0]` metadata.
+   - Official-verifier test is now `it.skipIf(!hasPythonWith("livekit"))` and reports the interpreter
+     used; it runs locally with `.venv` and in CI (which installs `livekit-api`).
+   - New regression test *“survives a missing Python binary instead of crashing on undefined stderr”*
+     deliberately spawns a non-existent binary and asserts the safe error message.
+   - Python AST syntax test now uses `runPython` and prints interpreter + stderr on failure.
+3. **`tests/ui.spec.ts`** — same resilient `runPython` helper for the Playwright export check.
+4. **`.github/workflows/ci.yml`** — web job installs Python 3.12 and `livekit-api==1.2.2`,
+   exports `VITEST_PYTHON_BIN=python`, so the official verifier cross-check always executes.
+5. **`src/browserToken.ts`** — added `iat` and `jti` so browser-minted tokens match the claim set of
+   `livekit.api.AccessToken`.
+
+**Verification performed:**
+
+| Scenario | Command | Result |
+|----------|---------|--------|
+| Full local environment (`.venv` + `uv`) | `pnpm run test:dom` | **10/10 passed** |
+| Simulated CI without `uv`, without `.venv`, Python lacking `livekit` | `PATH` stripped of `uv` + `.venv` hidden | **9 passed, 1 skipped — no crash** |
+| Python backend | `uv run pytest -q` | **49 passed, 1 skipped** |
+| Lint/format | `uv run ruff check . && ruff format --check .` | **clean, 15 files formatted** |
+| Production build | `pnpm run build` | **✅ built** |
+| Node.js starter | `cd agent-node && pnpm typecheck && pnpm test` | **typecheck clean, 3/3 pass** |
+
+All fixes are merged to `main` via this branch.
+
+*End of report.*

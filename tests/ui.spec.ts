@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { runPython } from "./pythonRunner";
 
 test.beforeEach(async ({ page }) => {
   // Tests never use a paid Cloud project or mint real inference credentials.
@@ -199,12 +199,13 @@ test("code download and keyboard dialog close work", async ({ page }) => {
   expect(file.suggestedFilename()).toBe("agent.py");
   const source = readFileSync((await file.path())!, "utf8");
   expect(source).toContain("inference.events");
-  const syntax = spawnSync(
-    "python",
-    ["-c", "import ast,sys; ast.parse(sys.stdin.read())"],
-    { input: source },
-  );
-  expect(syntax.status, syntax.stderr.toString()).toBe(0);
+  const syntax = runPython("import ast, sys; ast.parse(sys.stdin.read())", {
+    input: source,
+  });
+  expect(
+    syntax.ok,
+    `${syntax.runner ?? "no Python interpreter"}: ${syntax.detail}`,
+  ).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(trigger).toBeFocused();

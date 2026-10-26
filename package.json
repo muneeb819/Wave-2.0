@@ -12,6 +12,7 @@
     "e2b:proxy": "node scripts/e2b-traffic-proxy.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "build:docs": "pnpm run build && node scripts/sync-docs.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test:api": "python -m pytest tests -q",
     "test:dom": "vitest run",

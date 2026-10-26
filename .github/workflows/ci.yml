@@ -53,7 +53,21 @@ jobs:
         with:
           node-version: "22"
 
+      # The Studio tests cross-check browser-minted JWTs with the official
+      # `livekit.api.TokenVerifier`. Only the lightweight API client is needed here
+      # (not the full `livekit-agents` stack), so this stays fast.
+      - name: Set up Python for token verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install LiveKit API verifier
+        run: python -m pip install --disable-pip-version-check "livekit-api==1.2.2"
+
       - name: Install & test Web Studio
+        env:
+          # Lets tests/pythonRunner.ts use the interpreter that has `livekit` installed.
+          VITEST_PYTHON_BIN: python
         run: |
           pnpm install
           pnpm run test:dom

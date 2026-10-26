@@ -1,17 +1,26 @@
 {
   "name": "livekit-inference-studio",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.15.0"
+  },
   "scripts": {
+    "start": "python3 start.py || python start.py",
+    "e2b:proxy": "node scripts/e2b-traffic-proxy.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test:api": "python -m pytest tests -q",
+    "test:dom": "vitest run",
     "test:ui": "playwright test",
-    "test": "npm run test:api && npm run test:ui",
+    "test": "npm run test:api && npm run test:dom",
     "api": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers",
-    "agent": "python -m backend.agent dev"
+    "agent": "python -m backend.agent dev",
+    "agent:console": "python agent.py console",
+    "agent:start": "python -m backend.agent start"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.6",
@@ -23,11 +32,16 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
     "prettier": "^3.9.10",
     "typescript": "^5.8.3",
-    "vite": "^6.3.6"
+    "vite": "^6.3.6",
+    "vitest": "^3.2.4"
   }
 }

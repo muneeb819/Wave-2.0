@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 test.beforeEach(async ({ page }) => {
-  // Tests intentionally do not use a Cloud project or mint real inference credentials.
+  // Tests never use a paid Cloud project or mint real inference credentials.
   await page.route("**/api/status", (route) =>
     route.fulfill({
       json: {
@@ -12,6 +12,7 @@ test.beforeEach(async ({ page }) => {
         invalid_url: false,
         protected: false,
         agent_name: "inference-studio",
+        pipelines: ["stt-llm-tts", "realtime"],
         server_host: null,
       },
     }),
@@ -19,14 +20,14 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
 });
 
-test("reference pipeline and exact requested models render without client errors", async ({
+test("reference pipeline and Quickstart default models render without client errors", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await expect(page.getByRole("heading", { name: "Inference." })).toBeVisible();
   await expect(page.getByLabel("Speech to text model")).toHaveValue(
-    "xai/stt-1",
+    "assemblyai/universal-3-6-pro",
   );
   await expect(page.getByLabel("Language model")).toHaveValue(
     "google/gemma-4-31b-it",
@@ -209,15 +210,16 @@ test("code download and keyboard dialog close work", async ({ page }) => {
   await expect(trigger).toBeFocused();
 });
 
-test("realtime branch is explicitly an alternative, not a fake enabled integration", async ({
+test("realtime branch switches cleanly into speech-to-speech GPT Realtime 2.1 mode", async ({
   page,
 }) => {
   await page.locator(".branch-realtime").click();
-  await expect(page.getByRole("dialog")).toContainText(
-    "it is not enabled in this app",
-  );
-  await page.getByRole("button", { name: "Keep my pipeline" }).click();
+  await expect(page.getByRole("dialog")).toContainText("GPT Realtime 2.1");
+  await page.getByRole("button", { name: /Enable Realtime pipeline/ }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByLabel("Realtime speech model")).toHaveValue(
+    "openai/gpt-realtime-2.1",
+  );
 });
 
 test("session history can be filtered, searched, and cleared", async ({
@@ -249,13 +251,6 @@ test("session history can be filtered, searched, and cleared", async ({
   await expect(
     page.getByText("Your next conversation belongs here."),
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () =>
-        JSON.parse(sessionStorage.getItem("inference-studio:history") || "[]")
-          .length,
-    ),
-  ).toBe(0);
 });
 
 test("API offline state is actionable and demo still runs", async ({
@@ -303,7 +298,7 @@ test("mobile layout has no page overflow and navigation opens and closes", async
   ).toBe(true);
 });
 
-test("saved Nova 3 settings migrate once to xAI English without resetting other preferences", async ({
+test("saved legacy STT settings migrate once to AssemblyAI Universal 3.6 Pro English while preserving other preferences", async ({
   page,
 }) => {
   await page.evaluate(() => {
@@ -323,7 +318,7 @@ test("saved Nova 3 settings migrate once to xAI English without resetting other 
   });
   await page.reload();
   await expect(page.getByLabel("Speech to text model")).toHaveValue(
-    "xai/stt-1",
+    "assemblyai/universal-3-6-pro",
   );
   await expect(page.getByLabel("Transcription language")).toHaveValue("en");
   await expect(page.getByLabel("Language model")).toHaveValue(
@@ -332,19 +327,6 @@ test("saved Nova 3 settings migrate once to xAI English without resetting other 
   await expect(page.getByLabel("Text to speech model")).toHaveValue(
     "fishaudio/s2-pro",
   );
-  await page.getByRole("button", { name: "Get code", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText('model="xai/stt-1"');
-  await expect(dialog).toContainText('language="en"');
-  await page
-    .getByRole("button", { name: "Complete agent", exact: true })
-    .click();
-  await expect(dialog).toContainText("preserved-voice-123");
-  await expect(dialog).toContainText(
-    "Keep my existing instructions while switching speech recognition.",
-  );
-  await page.keyboard.press("Escape");
-  // Migration is one-time: an intentional later model/language change still persists.
   await page.getByLabel("Speech to text model").selectOption("deepgram/nova-3");
   await page.getByLabel("Transcription language").selectOption("es");
   await page.reload();

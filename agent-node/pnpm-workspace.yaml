@@ -1,0 +1,6 @@
+allowBuilds:
+  "@livekit/local-inference": true
+  "@livekit/rtc-node": true
+  esbuild: true
+  protobufjs: true
+  sharp: true

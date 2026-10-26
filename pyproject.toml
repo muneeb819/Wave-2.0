@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wave-2-livekit-agent"
+version = "2.0.0"
+description = "Wave 2.0 LiveKit Voice AI Studio & Quickstart Starter (STT-LLM-TTS + Realtime)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10, <3.15"
+
+dependencies = [
+    "livekit-agents[silero]==1.8.8",
+    "livekit-plugins-ai-coustics~=0.3",
+    "livekit-api==1.2.2",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "python-dotenv>=1.1,<2",
+    "httpx>=0.28,<1",
+    "cryptography>=42",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.9",
+]
+
+[tool.uv]
+# Exclude yarl 1.24.1 (published without Python 3.11+ wheels); allow 1.25+.
+constraint-dependencies = ["yarl!=1.24.1"]
+
+[tool.setuptools]
+py-modules = ["agent", "gen_cert"]
+packages = ["backend"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

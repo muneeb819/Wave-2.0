@@ -1,43 +1,32 @@
-# Live connection verified — xAI English STT
+# Connection & LiveKit Cloud Status
 
-Verified on 2026-10-20 (Asia/Karachi).
+## Current Sandbox Status
 
-- Active credential profile: **Wave 1**, unchanged
-- Project: `medicare-bot-z2uz9h17.livekit.cloud`
-- Agent dispatch name: `inference-studio`
-- Cloud authentication and worker registration: **passed**
-- Browser live room join and agent greeting: **passed**
-- Full spoken xAI STT → Gemma → Fish Audio round trip: **passed**
-- Non-silent remote speech received in the browser: **passed**
-- Production frontend build: **passed**
-- Offline backend regression tests: **31 passed**
-- Browser regression tests: **11 passed**, including legacy Nova 3 settings migration
+- **FastAPI Backend (`http://localhost:8000`)**: Ready (`/api/health` → `200 OK`, `/api/status` → `200 OK`)
+- **Vite Studio Preview (`http://localhost:5173`)**: Ready (proxies `/api/*` directly to `:8000`, bound to `0.0.0.0` with `allowedHosts: true` for preview domains)
+- **Demo Mode (`Demo` tab)**: Works immediately in the browser with **zero credentials**, supporting both **STT → LLM → TTS** and **Realtime speech-to-speech** pipelines, live code generation (Python & Node.js), keyterms, instructions, voice configuration, metrics, and session history export.
 
-## Current stack tested
+## Going Live with Real Audio
 
-- STT: **xAI Speech to Text**, `xai/stt-1`
-- Transcription language: **English**, `en`
-- LLM: `google/gemma-4-31b-it` — unchanged
-- TTS: `fishaudio/s2.1-pro` — unchanged
-- Voice: `fa4c9eb3dccc4806b382b40d61c6b10a` — unchanged
+To connect real WebRTC microphone audio and LiveKit Cloud Inference:
 
-xAI is accessed through LiveKit Inference with the existing Wave 1 key/secret, not a separate xAI provider key. The worker uses Silero VAD-based turn handling for this STT model.
+1. Authenticate with LiveKit Cloud or create `.env.local` in `/home/user/Wave-2.0/.env.local`:
+   ```bash
+   lk cloud auth
+   lk app env -w
+   ```
+   Or manually create `.env.local`:
+   ```dotenv
+   LIVEKIT_URL=wss://your-project.livekit.cloud
+   LIVEKIT_API_KEY=your-api-key
+   LIVEKIT_API_SECRET=your-api-secret
+   ```
+2. Start the LiveKit Agent worker in a second process:
+   ```bash
+   # Studio dynamic worker (honors UI model/pipeline/voice/keyterm selections per room)
+   uv run python -m backend.agent dev
 
-## Live speech test
-
-Synthetic audio was supplied through Chromium's test microphone. No physical microphone was accessed for this test.
-
-- Spoken test input: “Please say connection successful.”
-- xAI transcript: “Please say connection successful.”
-- Agent response: “Connection successful.”
-- Fish Audio output was received as non-silent audio in the browser.
-
-The automated test session was ended after verification. The updated app and Python worker remain running in the current workspace. Refresh the app, select **Live**, click **Start session**, and allow microphone access. Open the preview in a new tab if embedding permissions block the microphone. Physical-device permissions and speech interruption behavior still need a manual check in your browser. Runtime processes must be restarted if the workspace runtime stops.
-
-Saved Nova 3/Flux STT settings are migrated to xAI English on first load of this version. Existing LLM/TTS selections, voice, instructions, and session history are preserved. Later intentional model choices still persist. Existing room tokens/sessions keep their embedded configuration; start a new session for the updated STT.
-
-## Credential handling
-
-The Wave 1 key/secret remain in the server-only `.env.local` (file mode 600), not in browser assets or API status responses. The standard `inference-studio.zip` is credential-free. The explicitly private `inference-studio-wave1-private.zip` includes `.env.local` at the owner's request; it is not encrypted and must not be published or committed. Enable application authentication or a Studio access token before sharing a credentialed live endpoint. Disable the public LiveKit development token server when no longer needed and rotate chat-shared keys before production use.
-
-Model reference: https://docs.livekit.io/agents/models/stt/spacexai/
+   # OR standalone Quickstart worker
+   uv run agent.py dev
+   ```
+3. Click **Check connection** in the Studio UI, switch the Playground toggle from **Demo** to **Live**, and click **Start session**.

@@ -1,7 +1,10 @@
 livekit-agents[silero]==1.8.8
+livekit-plugins-ai-coustics~=0.3
 livekit-api==1.2.2
 fastapi>=0.115,<1
 uvicorn[standard]>=0.34,<1
 python-dotenv>=1.1,<2
 httpx>=0.28,<1
+cryptography>=42
 pytest>=8,<10
+pytest-asyncio>=1.0

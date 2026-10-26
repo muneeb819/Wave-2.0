@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python Agent, API & Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Download plugin model files
+        run: uv run python -m livekit.agents download-files
+
+      - name: Run Ruff linter & formatter check
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Run Python API & Agent tests
+        run: uv run pytest -q
+
+  web-and-node-agent:
+    name: Web Studio & Node.js Agent Starter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install & test Web Studio
+        run: |
+          pnpm install
+          pnpm run test:dom
+          pnpm run build
+
+      - name: Install, typecheck & test Node.js Agent Starter
+        working-directory: agent-node
+        run: |
+          pnpm install
+          pnpm run typecheck
+          pnpm test

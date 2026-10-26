@@ -1,12 +1,30 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { spawnSync } from "node:child_process";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import { mintBrowserLiveKitSession } from "../src/browserToken";
 import { fullAgent, nodeAgent, quickstartAgent, snippet } from "../src/code";
 import { defaultConfig, readConfig } from "../src/types";
+import { describeSpawnFailure, hasPythonWith, runPython } from "./pythonRunner";
+
+const TOKEN_CREDS = {
+  livekitUrl: "wss://medicare-bot-z2uz9h17.livekit.cloud",
+  apiKey: "APItestKey123",
+  apiSecret: "super-secret-livekit-key-at-least-32-chars",
+};
+const AGENT_ID = "CA_tBWDFVRz7pZS";
+
+const decodeJwtSegment = (segment: string): Record<string, any> =>
+  JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
 
 beforeEach(() => {
   localStorage.clear();
@@ -104,12 +122,16 @@ describe("Wave 2.0 Studio Workbench UI & Code Generation", () => {
           quickstartAgent(cfg),
           fullAgent(cfg),
         ]) {
-          const check = spawnSync(
-            "python",
-            ["-c", "import ast, sys; ast.parse(sys.stdin.read())"],
-            { input: pySource },
+          const check = runPython(
+            "import ast, sys; ast.parse(sys.stdin.read())",
+            {
+              input: pySource,
+            },
           );
-          expect(check.status, check.stderr.toString()).toBe(0);
+          expect(
+            check.ok,
+            `${check.runner ?? "no Python interpreter"}: ${check.detail}`,
+          ).toBe(true);
         }
         const tsSource = nodeAgent(cfg);
         expect(tsSource).toContain("defineAgent");
@@ -178,15 +200,15 @@ describe("Wave 2.0 Studio Workbench UI & Code Generation", () => {
       { timeout: 3000 },
     );
 
-    await user.click(
-      screen.getAllByRole("button", { name: "End session" })[0],
-    );
+    await user.click(screen.getAllByRole("button", { name: "End session" })[0]);
 
     // Navigate to Sessions and verify entry recorded
     const viewsNav = screen.getByRole("navigation", {
       name: "Workspace views",
     });
-    await user.click(within(viewsNav).getByRole("button", { name: /Sessions/ }));
+    await user.click(
+      within(viewsNav).getByRole("button", { name: /Sessions/ }),
+    );
     expect(screen.getByText("Voice session")).toBeInTheDocument();
 
     // Navigate to Configuration and verify CLI & self-hosted controls
@@ -251,45 +273,103 @@ describe("Wave 2.0 Studio Workbench UI & Code Generation", () => {
     );
   });
 
-  it("mints WebCrypto HS256 JWTs verified by official livekit.api.TokenVerifier for CA_tBWDFVRz7pZS", async () => {
+  it("mints room-scoped HS256 JWTs via WebCrypto with LiveKit-compatible claims", async () => {
     const minted = await mintBrowserLiveKitSession(
-      {
-        livekitUrl: "wss://medicare-bot-z2uz9h17.livekit.cloud",
-        apiKey: "APItestKey123",
-        apiSecret: "super-secret-livekit-key-at-least-32-chars",
-      },
+      TOKEN_CREDS,
       defaultConfig,
-      "CA_tBWDFVRz7pZS",
+      AGENT_ID,
     );
-    const verify = spawnSync(
-      process.env.VITEST_PYTHON_BIN || "uv",
-      process.env.VITEST_PYTHON_BIN
-        ? [
-            "-c",
-            [
-              "import sys",
-              "from livekit import api",
-              "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
-              "claims = verifier.verify(sys.stdin.read().strip())",
-              "assert claims.video.room_join is True",
-              "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
-            ].join("\n"),
-          ]
-        : [
-            "run",
-            "python",
-            "-c",
-            [
-              "import sys",
-              "from livekit import api",
-              "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
-              "claims = verifier.verify(sys.stdin.read().strip())",
-              "assert claims.video.room_join is True",
-              "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
-            ].join("\n"),
-          ],
-      { input: minted.participant_token },
-    );
-    expect(verify.status, verify.stderr.toString()).toBe(0);
+    const [encodedHeader, encodedPayload, encodedSignature] =
+      minted.participant_token.split(".");
+
+    expect(decodeJwtSegment(encodedHeader)).toEqual({
+      alg: "HS256",
+      typ: "JWT",
+    });
+
+    const claims = decodeJwtSegment(encodedPayload);
+    expect(claims.iss).toBe(TOKEN_CREDS.apiKey);
+    expect(claims.sub).toBe(minted.room_name.replace("inference-", "user-"));
+    expect(typeof claims.jti).toBe("string");
+    expect(claims.exp - claims.iat).toBe(600);
+    expect(claims.exp - claims.nbf).toBe(605);
+    expect(claims.video).toMatchObject({
+      roomJoin: true,
+      room: minted.room_name,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+      canPublishSources: ["microphone"],
+      canUpdateOwnMetadata: false,
+    });
+    expect(claims.roomConfig.name).toBe(minted.room_name);
+    expect(claims.roomConfig.maxParticipants).toBe(2);
+    expect(claims.roomConfig.agents).toEqual([
+      {
+        agentName: AGENT_ID,
+        metadata: expect.any(String),
+      },
+    ]);
+    expect(JSON.parse(claims.roomConfig.agents[0].metadata)).toMatchObject({
+      pipeline: defaultConfig.pipeline,
+      voice: defaultConfig.voice,
+    });
+
+    // Signature must be a valid HMAC-SHA256 over `header.payload` for the API secret.
+    const expected = createHmac("sha256", TOKEN_CREDS.apiSecret)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest();
+    const actual = Buffer.from(encodedSignature, "base64url");
+    expect(actual.length).toBe(expected.length);
+    expect(timingSafeEqual(actual, expected)).toBe(true);
   });
+
+  it("survives a missing Python binary instead of crashing on undefined stderr", () => {
+    // Regression: `spawnSync` sets `stderr: null` when the binary cannot be started,
+    // so the old `result.stderr.toString()` assertion threw a TypeError in CI.
+    const missing = spawnSync(
+      "wave2-definitely-not-a-real-python",
+      ["-c", "print(1)"],
+      {
+        encoding: "utf8",
+      },
+    );
+    expect(missing.status).toBeNull();
+    expect(missing.stderr ?? null).toBeNull();
+    expect(describeSpawnFailure(missing)).toMatch(/ENOENT|not found|spawn/i);
+
+    const unavailable = runPython("print(1)", {
+      requireModule: "__wave2_missing_module__",
+    });
+    expect(unavailable.ok).toBe(false);
+    expect(unavailable.runner).toBeNull();
+    expect(unavailable.detail).toMatch(/No Python interpreter/);
+  });
+
+  it.skipIf(!hasPythonWith("livekit"))(
+    "cross-checks the WebCrypto JWT with the official livekit.api.TokenVerifier",
+    async () => {
+      const minted = await mintBrowserLiveKitSession(
+        TOKEN_CREDS,
+        defaultConfig,
+        AGENT_ID,
+      );
+      const verification = runPython(
+        [
+          "import sys",
+          "from livekit import api",
+          `verifier = api.TokenVerifier(${JSON.stringify(TOKEN_CREDS.apiKey)}, ${JSON.stringify(TOKEN_CREDS.apiSecret)})`,
+          "claims = verifier.verify(sys.stdin.read().strip())",
+          "assert claims.video.room_join is True",
+          `assert claims.video.room == ${JSON.stringify(minted.room_name)}`,
+          `assert claims.room_config.agents[0].agent_name == ${JSON.stringify(AGENT_ID)}`,
+        ].join("\n"),
+        { input: minted.participant_token, requireModule: "livekit" },
+      );
+      expect(
+        verification.ok,
+        `${verification.runner ?? "no Python interpreter"}: ${verification.detail}`,
+      ).toBe(true);
+    },
+  );
 });

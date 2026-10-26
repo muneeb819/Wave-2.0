@@ -141,9 +141,21 @@ pnpm run test:dom
 # Build production Studio bundle
 pnpm run build
 
+# Rebuild the committed GitHub Pages bundle in docs/ (index.html + 404.html + assets)
+pnpm run build:docs
+
 # Typecheck & test Node.js LiveKit starter
 cd agent-node && pnpm run typecheck && pnpm test
 
 # Run multi-turn LiveKit Cloud conversation simulations (requires LiveKit Cloud auth)
 lk agent simulate text --scenarios scenarios.yaml
 ```
+
+> **Python discovery in the Studio test suite:** `pnpm run test:dom` always verifies the
+> browser-minted JWT signature and every LiveKit claim using Node's built-in `crypto`
+> module, so it never needs Python. When an interpreter with `livekit` installed is
+> available, the suite *additionally* cross-checks the same token with the official
+> `livekit.api.TokenVerifier`; otherwise that single test reports **skipped** instead of
+> failing. Resolution order: `VITEST_PYTHON_BIN` → `.venv/bin/python` (from `uv sync`) →
+> `python3` / `python` → `uv run python`. CI installs the lightweight `livekit-api`
+> package and sets `VITEST_PYTHON_BIN=python`, so the cross-check always runs there.

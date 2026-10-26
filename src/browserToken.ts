@@ -1,7 +1,7 @@
 import type { Config } from "./types";
 
 export const PUBLIC_CHROME_STUDIO_URL =
-  "https://raw.githack.com/muneeb819/Wave-2.0/arena/060acccf-wave-2-0/docs/index.html?mode=live";
+  "https://raw.githack.com/muneeb819/Wave-2.0/main/docs/index.html?mode=live";
 
 const SESSION_CREDS_KEY = "inference-studio:session-livekit-creds";
 
@@ -59,7 +59,10 @@ function toBase64Url(bytes: Uint8Array): string {
   for (let i = 0; i < bytes.length; i += 1) {
     binary += String.fromCharCode(bytes[i]);
   }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
 function utf8Bytes(input: string): Uint8Array<ArrayBuffer> {
@@ -90,10 +93,14 @@ export async function mintBrowserLiveKitSession(
   const now = Math.floor(Date.now() / 1000);
 
   const header = { alg: "HS256", typ: "JWT" };
+  // Mirror the claim set produced by `livekit.api.AccessToken`: `iat`/`jti` are present
+  // so browser-minted tokens are indistinguishable from server-minted ones.
   const payload = {
     iss: creds.apiKey.trim(),
     sub: identity,
     name: "You",
+    jti: crypto.randomUUID(),
+    iat: now,
     nbf: now - 5,
     exp: now + 600,
     video: {

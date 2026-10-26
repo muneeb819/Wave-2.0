@@ -23,6 +23,11 @@ On Windows, `publish-wave.ps1` automates Steps 1-3 below and then verifies the r
 powershell -ExecutionPolicy Bypass -File .\publish-wave.ps1
 ```
 
+Before the first launch it also runs `start.py --preflight` and stops if anything blocking
+is reported, so a misconfigured deployment fails in seconds instead of after the server is up.
+Use `-InstallAutostart` to add a Task Scheduler job that starts the server at boot, and
+`-RemoveAutostart` to delete it.
+
 It is equivalent to running the three steps manually, in this order:
 
 | Step | What the script does |
@@ -54,6 +59,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 The script never prints your API secret, never sends the access token on a command line, and
 is safe to re-run: existing `.env.local` values are preserved and the firewall rule is reused.
+
+The complete go-live checklist - pre-flight, systemd, Docker, monitoring, rollback and the
+security model - is in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ---
 

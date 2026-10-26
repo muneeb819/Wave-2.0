@@ -33,7 +33,7 @@ dev = [
 constraint-dependencies = ["yarl!=1.24.1"]
 
 [tool.setuptools]
-py-modules = ["agent", "gen_cert"]
+py-modules = ["agent", "gen_cert", "preflight"]
 packages = ["backend"]
 
 [tool.pytest.ini_options]

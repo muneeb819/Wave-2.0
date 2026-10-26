@@ -37,9 +37,11 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -226,6 +228,19 @@ def wait_for_http(url: str, timeout: float = 20.0, insecure: bool = False) -> bo
     return False
 
 
+def studio_token() -> str:
+    """STUDIO_ACCESS_TOKEN from the environment or .env.local (no imports, never printed)."""
+    if os.environ.get("STUDIO_ACCESS_TOKEN"):
+        return os.environ["STUDIO_ACCESS_TOKEN"].strip()
+    env_file = ROOT / ".env.local"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, _, value = line.strip().partition("=")
+            if key.strip() == "STUDIO_ACCESS_TOKEN":
+                return value.strip().strip("'\"")
+    return ""
+
+
 def has_livekit_credentials(py: str) -> bool:
     code = (
         "from backend.config import CREDENTIAL_NAMES, environment; "
@@ -241,6 +256,92 @@ def has_livekit_credentials(py: str) -> bool:
         ).returncode
         == 0
     )
+
+
+_redirect_servers: list[ThreadingHTTPServer] = []
+
+
+def build_redirect_handler(public_host: str, https_port: int) -> type[BaseHTTPRequestHandler]:
+    """301 every plain-HTTP request to the matching https URL (keeps the path/query)."""
+
+    class RedirectHandler(BaseHTTPRequestHandler):
+        server_version = "WaveRedirect/2.0"
+        sys_version = ""
+
+        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            self._redirect()
+
+        def do_HEAD(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            self._redirect()
+
+        def _redirect(self) -> None:
+            requested = normalise_host(self.headers.get("Host", "")) or public_host or "localhost"
+            target = build_url("https", requested, https_port) + self.path
+            body = f"Redirecting to {target}\n".encode()
+            self.send_response(301)
+            self.send_header("Location", target)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+            return
+
+    return RedirectHandler
+
+
+def start_http_redirect(
+    public_host: str, https_port: int, http_port: int
+) -> ThreadingHTTPServer | None:
+    """Listen on `http_port` and redirect to https; returns None when the port is unusable."""
+    try:
+        server = ThreadingHTTPServer(
+            ("0.0.0.0", http_port), build_redirect_handler(public_host, https_port)
+        )
+    except OSError as exc:
+        print(
+            f"Note: could not listen on HTTP port {http_port} ({exc}).\n"
+            "      Port 80 needs admin/root; try --http-port 8080 or forward 80 -> 8080."
+        )
+        return None
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, name="wave-http-redirect", daemon=True).start()
+    _redirect_servers.append(server)
+    print(
+        f"HTTP -> HTTPS redirect listening on port {http_port} (https://<host>:{https_port})",
+        flush=True,
+    )
+    return server
+
+
+def stop_http_redirects() -> None:
+    for server in _redirect_servers:
+        try:
+            server.shutdown()
+            server.server_close()
+        except Exception:
+            pass
+    _redirect_servers.clear()
+
+
+def publishing_risks(host: str, token: str) -> list[str]:
+    """Warnings worth printing before a network-visible launch."""
+    if host in {"127.0.0.1", "localhost", "::1", ""}:
+        return []
+    messages: list[str] = []
+    if not token:
+        messages.append(
+            "STUDIO_ACCESS_TOKEN is empty: anyone who can reach this port can open sessions\n"
+            "        and spend LiveKit inference credits. Set it in .env.local or run\n"
+            "        `python start.py --preflight --https --host " + host + "`."
+        )
+    messages.append(
+        "The router must forward the published TCP port to this machine, and the local\n"
+        "        firewall must allow it - see PUBLISH_IP.md (or run publish-wave.ps1 on Windows)."
+    )
+    return messages
 
 
 def ensure_certificate(hosts: list[str], key: Path | None, cert: Path | None) -> tuple[Path, Path]:
@@ -320,6 +421,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Rebuild dist/ before starting in prod mode.",
     )
+    parser.add_argument(
+        "--http-port",
+        type=int,
+        default=None,
+        help="Also listen on this plain-HTTP port and redirect to https (needs --https; "
+        "port 80 needs admin/root, 8080 works without privileges).",
+    )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Run deployment readiness checks (env, token, port, TLS, build) and exit.",
+    )
     parser.add_argument("--no-open", action="store_true", help="Do not open a browser.")
     parser.add_argument("--no-worker", action="store_true", help="Never start the agent worker.")
     parser.add_argument(
@@ -337,6 +450,20 @@ def main(argv: list[str] | None = None) -> int:
     host = normalise_host(args.host) or "127.0.0.1"
     scheme = "https" if args.https else "http"
     port = args.port or (DEFAULT_DEV_UI_PORT if args.mode == "dev" else DEFAULT_PROD_PORT)
+
+    if args.preflight:
+        from preflight import exit_code, format_report, run_preflight
+
+        report = run_preflight(host=host, port=port, https=args.https, mode=args.mode)
+        print(format_report(report))
+        return exit_code(report)
+
+    if args.http_port is not None and not args.https:
+        print("--http-port only makes sense with --https (it redirects plain HTTP to TLS).")
+        return 2
+
+    if args.http_port is not None and args.mode != "prod":
+        print("Note: --http-port is only used in --mode prod; ignoring it here.")
 
     # --- Validate the requested bind address -----------------------------------------
     requested_host = host
@@ -380,6 +507,7 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit:
         return 0
     finally:
+        stop_http_redirects()
         shutdown()
 
 
@@ -429,6 +557,9 @@ def run_production(
     proc = subprocess.Popen(command, cwd=ROOT)
     if processes is not None:
         processes.append(proc)
+
+    if args.https and args.http_port:
+        start_http_redirect(requested_host or host, port, args.http_port)
 
     health_host = "127.0.0.1" if host in WILDCARD_HOSTS else host
     ready = wait_for_http(
@@ -580,26 +711,27 @@ def print_publication_summary(
         "\nWave 2.0 is running"
         f" [{'prod' if prod else 'dev'}, {scheme.upper()}] - {status}\n"
         + "\n".join(urls)
-        + f"\n{api_line}"
+        + f"\n{api_line}",
+        flush=True,
     )
 
     if scheme == "https":
         print(
             "\nTLS note: the certificate is self-signed, so the first visit shows a warning.\n"
-            "          Choose Advanced -> Proceed to continue (required for microphone access)."
+            "          Choose Advanced -> Proceed to continue (required for microphone access).",
+            flush=True,
         )
     elif host not in WILDCARD_HOSTS and host not in {"127.0.0.1", "localhost", "::1"}:
         print(
             "\nWarning: plain HTTP on a non-localhost address is NOT a secure context, so\n"
             "         Chrome/Edge/Safari will block the microphone and Live sessions cannot\n"
-            "         connect. Re-run with --https to publish with TLS."
+            "         connect. Re-run with --https to publish with TLS.",
+            flush=True,
         )
 
-    if host in WILDCARD_HOSTS and not args.no_worker:
-        print(
-            "\nSecurity: you are listening on every interface. Set STUDIO_ACCESS_TOKEN in\n"
-            "          .env.local before exposing this beyond your own network."
-        )
+    exposure = host if host not in WILDCARD_HOSTS else (requested_host or "0.0.0.0")
+    for message in publishing_risks(exposure, studio_token()):
+        print(f"\nWarning: {message}", flush=True)
 
 
 if __name__ == "__main__":

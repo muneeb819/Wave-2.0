@@ -1,4 +1,4 @@
-.PHONY: setup setup-uv setup-node api web agent agent-console agent-start agent-realtime agent-node build lint test test-dom test-ui cert start serve publish
+.PHONY: setup setup-uv setup-node api web agent agent-console agent-start agent-realtime agent-node build lint test test-dom test-ui cert start serve publish preflight docker-studio
 
 setup:
 	uv sync
@@ -52,6 +52,12 @@ test-ui:
 
 cert:
 	uv run python gen_cert.py
+
+preflight:
+	uv run python start.py --preflight --mode prod --https --host $(or $(IP),0.0.0.0) --port $(or $(PORT),8443)
+
+docker-studio:
+	docker build -t wave-2-studio:2.0.0 .
 
 start:
 	uv run python start.py

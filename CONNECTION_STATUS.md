@@ -31,6 +31,23 @@ To connect real WebRTC microphone audio and LiveKit Cloud Inference:
    ```
 3. Click **Check connection** in the Studio UI, switch the Playground toggle from **Demo** to **Live**, and click **Start session**.
 
+## Live Deployment Readiness
+
+Everything needed to run this on a public IP is now covered and verified:
+
+```bash
+python start.py --preflight --mode prod --https --host 182.183.90.63 --port 8443   # readiness report
+python start.py --mode prod --https --host 182.183.90.63 --yes --port 8443         # launch (add --http-port 8080)
+```
+
+- Windows: `publish-wave.ps1` (deps, token, router/UPnP, firewall, launch, verify, optional `-InstallAutostart`).
+- Linux: `deploy/wave-studio.service` (boot start, restart-on-crash, pre-flight gate).
+- Docker: `docker compose --env-file .env.local up -d --build` (default service = HTTPS on :8443).
+- Always: `STUDIO_ACCESS_TOKEN` is enforced, anonymous remote writes are refused, hashed assets are
+  cached immutably, and `/api/health` reports version + uptime.
+
+Full checklist, security model, operations and troubleshooting: **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
 ## Publishing on a LAN or Public IP
 
 `start.py` now handles binding and TLS for you:

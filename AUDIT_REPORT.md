@@ -1,6 +1,6 @@
 # Wave 2.0 — Full Project Audit & Local Launch Report
 **Date:** 2026-10-26  
-**Branch:** `arena/49507cdf-wave-2-0` (from `183f3a1`)  
+**Branch:** `arena/87ce00d5-wave-2-0` → merged to `main` (PR #2, PR #3)  
 **Auditor:** Arena.ai Agent Mode  
 **Project:** [muneeb819/Wave-2.0](https://github.com/muneeb819/Wave-2.0) — LiveKit Voice AI Studio & Python + Node.js Starter Workbench
 
@@ -12,18 +12,25 @@
 |------|--------|
 | **Overall health** | ✅ **Production-ready for demo + staging** — no blockers |
 | **Python tests** | ✅ **49 passed, 1 skipped** (`uv run pytest -q`) |
-| **Frontend unit tests (vitest/jsdom)** | ✅ **8/8 passed** after fix (`pnpm run test:dom`) |
-| **Lint / format (ruff)** | ✅ All checks passed, 14 files formatted |
+| **Frontend unit tests (vitest/jsdom)** | ✅ **10/10 passed** (`pnpm run test:dom`) |
+| **Node.js starter** | ✅ `pnpm typecheck` clean, **3/3 tests passed** |
+| **Lint / format (ruff)** | ✅ All checks passed, 15 files formatted |
+| **CI (GitHub Actions)** | ✅ Python + Web/Node jobs green; Simulations skips cleanly without Cloud secrets |
 | **Typecheck (tsc -b)** | ✅ Clean |
 | **Production build** | ✅ `vite build` — 363 kB app + 602 kB livekit-client (gzip 108 kB / 158 kB) |
 | **Security** | ✅ No leaked secrets, safe env handling, OWASP-minded API |
 | **Docker** | ✅ Ready (`Dockerfile` + `agent-node/Dockerfile`) |
 | **Local launch** | ✅ **LIVE** — API on `:8000` + Studio UI on `:5173` |
 
-**Two fixes applied during this audit:**
+**Fixes applied across this audit (all merged):**
 
-1. `tests/app.ui.test.tsx` — `spawnSync("python")` → `uv run python` fallback so WebCrypto JWT test passes outside `.venv`-activated shells.
+1. `tests/app.ui.test.tsx` — resilient Python discovery so the WebCrypto JWT test passes outside `.venv`-activated shells.
 2. `start.py` — Vite/API hosts changed from `127.0.0.1` → `0.0.0.0` for E2B / Docker preview compatibility.
+3. `tests/pythonRunner.ts` — new interpreter resolver; removes the CI-only `TypeError: Cannot read properties of undefined (reading 'toString')` crash caused by `spawnSync` returning `stderr: null`.
+4. `src/browserToken.ts` — browser-minted JWTs now include `iat`/`jti` to match `livekit.api.AccessToken`; Pages bundle targets `main`.
+5. `.github/workflows/ci.yml` — web job installs Python + `livekit-api` and runs the official `TokenVerifier` cross-check.
+6. `.github/workflows/simulations.yml` — LiveKit Cloud simulations are gated on secrets and skip cleanly when they are absent.
+7. `scripts/sync-docs.mjs` + `pnpm build:docs` — regenerates the committed GitHub Pages bundle in `docs/`.
 
 ---
 
@@ -299,8 +306,13 @@ Placeholders only — no real secrets. Cloud project `p_jg0goo2oksb` / agent `CA
 - Simple Node 22 + pnpm build.
 
 ### `.github/workflows/ci.yml` — ✅
-- Two jobs: Python (uv 3.12 + ruff + pytest) and Web+Node (pnpm + test:dom + build + typecheck)
-- `simulations.yml` runs `lk agent simulate text --scenarios scenarios.yaml` on LiveKit Cloud — requires `secrets.LIVEKIT_*`.
+- Two jobs: Python (uv 3.12 + ruff + pytest) and Web+Node (pnpm + test:dom + build + typecheck).
+- The web job installs Python 3.12 + `livekit-api==1.2.2` and sets `VITEST_PYTHON_BIN=python`, so the
+  official `livekit.api.TokenVerifier` cross-check always runs there (and is skipped, never failed,
+  on machines without a Python/LiveKit environment).
+- `simulations.yml` runs `lk agent simulate text --scenarios scenarios.yaml` on LiveKit Cloud — requires
+  `secrets.LIVEKIT_*`. When those secrets are absent the job now exits **green** with a notice instead of
+  failing an unauthenticated `lk` command.
 
 ---
 
@@ -495,5 +507,29 @@ anything useful — the test crashed instead of failing gracefully.
 | Node.js starter | `cd agent-node && pnpm typecheck && pnpm test` | **typecheck clean, 3/3 pass** |
 
 All fixes are merged to `main` via this branch.
+
+*End of report.*
+
+---
+
+## 15. Final Status — Main Branch Green
+
+| Check (on `main` after merge) | Result |
+|---|---|
+| `CI / Python Agent, API & Ruff` | ✅ pass |
+| `CI / Web Studio & Node.js Agent Starter` | ✅ pass (includes official JWT verifier) |
+| `Simulations` | ✅ pass — skips with notice when Cloud secrets are absent |
+| `pnpm run test:dom` | 10/10 |
+| `uv run pytest -q` | 49 passed, 1 skipped |
+| `pnpm run build:docs` | docs/ bundle regenerated from the same build |
+
+Pull requests merged:
+
+- **PR #1** — initial audit report, `start.py` host bind, first Python-discovery fix.
+- **PR #2** — `stderr.toString()` crash fix (`tests/pythonRunner.ts`), JWT claim parity, CI Python setup, docs bundle sync.
+- **PR #3** — simulations workflow gated on LiveKit Cloud secrets.
+
+`main` is the source of truth and is fully green. Local preview is running at `:5173` (Studio) and
+`:8000` (API).
 
 *End of report.*

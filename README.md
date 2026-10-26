@@ -103,6 +103,14 @@ pnpm run publish                                 # production + HTTPS on 0.0.0.0
 python start.py --mode prod --https --host 182.183.90.63 --yes --port 8443
 ```
 
+On **Windows**, `publish-wave.ps1` runs the whole go-live checklist - dependencies,
+`.env.local` + `STUDIO_ACCESS_TOKEN`, router port-forwarding (UPnP or exact instructions),
+the inbound firewall rule, then the HTTPS server - and verifies it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\publish-wave.ps1
+```
+
 This binds every interface, generates a self-signed certificate that lists that IP in its
 SAN, and serves the UI and API from one process. Browsers only allow microphone access in
 a secure context, so plain HTTP on an IP silently disables the Live pipeline — always pair

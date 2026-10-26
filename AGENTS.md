@@ -80,6 +80,8 @@ Rules that matter:
 - Set `STUDIO_ACCESS_TOKEN` in `.env.local` before exposing the Studio beyond your own
   network — the token service has no user accounts.
 - Full runbook (router, firewall, CGNAT, tunnels, troubleshooting): `PUBLISH_IP.md`.
+- Windows: `publish-wave.ps1` wraps the three go-live steps (deps + `.env.local` token,
+  router/UPnP, firewall) and then launches `start.py`; keep it in sync when flags change.
 
 ### Full Wave 2.0 Studio Workbench (`inference-studio` dispatch)
 

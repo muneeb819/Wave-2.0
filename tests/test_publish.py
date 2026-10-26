@@ -6,6 +6,7 @@ Nothing here opens a socket to the network, forwards a port, or contacts LiveKit
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -179,3 +180,42 @@ def test_unbindable_host_exits_with_guidance():
     assert result.returncode == 2
     assert "192.0.2.1" in result.stdout
     assert "0.0.0.0" in result.stdout
+
+
+# --- Windows one-shot publisher (publish-wave.ps1) ------------------------------------
+def test_publish_script_exists_and_is_ascii():
+    """Windows PowerShell 5.1 misreads UTF-8 without a BOM, so keep the script ASCII-only."""
+    script = ROOT / "publish-wave.ps1"
+    assert script.is_file(), "publish-wave.ps1 is missing from the repository root"
+    raw = script.read_bytes()
+    assert all(byte < 128 for byte in raw), "publish-wave.ps1 must stay pure ASCII"
+
+
+def test_publish_script_covers_all_three_steps():
+    text = (ROOT / "publish-wave.ps1").read_text(encoding="ascii")
+    # Step 1 - launcher invocation with TLS on the public IP
+    assert "--mode" in text and '"prod"' in text
+    assert "--https" in text and "--host" in text and "--yes" in text and "--no-open" in text
+    # Step 2 - router handling
+    assert "AddPortMapping" in text  # UPnP IGD attempt
+    assert "Port Forwarding" in text  # manual fallback guidance
+    # Step 3 - Windows Firewall
+    assert "New-NetFirewallRule" in text
+    assert "Set-NetFirewallRule" in text  # idempotent refresh path
+    assert "Test-IsAdmin" in text and "RunAs" in text  # self-elevation
+
+
+def test_publish_script_defaults_match_the_documented_ip_and_port():
+    text = (ROOT / "publish-wave.ps1").read_text(encoding="ascii")
+    assert re.search(r'\[string\]\$PublicIp\s*=\s*"182\.183\.90\.63"', text)
+    assert re.search(r"\[int\]\$Port\s*=\s*8443", text)
+
+
+def test_publish_script_protects_the_studio_token():
+    text = (ROOT / "publish-wave.ps1").read_text(encoding="ascii")
+    # Token must be generated into .env.local, never echoed in full or passed on a
+    # command line (both would leak it to process listings / logs).
+    assert "STUDIO_ACCESS_TOKEN" in text
+    assert "RandomNumberGenerator" in text
+    assert "RotateToken" in text
+    assert "Value (masked)" in text

@@ -14,7 +14,50 @@ This runbook publishes the Studio so it is reachable at **`https://182.183.90.63
 
 ---
 
-## 0. One-command publish
+## 0. Windows: one script does all three steps
+
+On Windows, `publish-wave.ps1` automates Steps 1-3 below and then verifies the result:
+
+```powershell
+# From the repository root. Right-click -> "Run with PowerShell" also works.
+powershell -ExecutionPolicy Bypass -File .\publish-wave.ps1
+```
+
+It is equivalent to running the three steps manually, in this order:
+
+| Step | What the script does |
+|---|---|
+| **1. Prepare this PC** | Checks Python/Node, runs `uv sync` + `pnpm install` when needed, creates `.env.local` from `.env.example`, generates a 32-byte **`STUDIO_ACCESS_TOKEN`**, warns when `LIVEKIT_*` are still placeholders, then launches `python start.py --mode prod --https --host 182.183.90.63 --yes --port 8443` |
+| **2. Router** | Detects the LAN address, default gateway and DHCP state; checks for **CGNAT**; tries a UPnP port mapping automatically and otherwise prints the exact rule to create (and the router URL) |
+| **3. Firewall** | Self-elevates with UAC and creates/repairs the inbound rule `Wave 2.0 Studio (TCP 8443)` |
+
+Afterwards it waits for `/api/health`, tests localhost + LAN + public reachability, and prints
+the URL, the access token to paste into the Studio, and what to fix if a check failed.
+
+Common options:
+
+```powershell
+.\publish-wave.ps1 -PublicIp 182.183.90.63 -Port 8443      # defaults
+.\publish-wave.ps1 -RouterMode Manual                        # never touch UPnP
+.\publish-wave.ps1 -NoLaunch                                 # configure only (dry run)
+.\publish-wave.ps1 -RotateToken                              # issue a new access token
+.\publish-wave.ps1 -SkipFirewall -SkipInstall                # you manage those yourself
+.\publish-wave.ps1 -WhatIf                                   # show what would change
+```
+
+If PowerShell blocks the file (`... cannot be loaded because running scripts is disabled`),
+either use the `-ExecutionPolicy Bypass` form above or run once:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+The script never prints your API secret, never sends the access token on a command line, and
+is safe to re-run: existing `.env.local` values are preserved and the firewall rule is reused.
+
+---
+
+## 0b. One-command publish (all platforms)
 
 From the repository root on the machine that should serve the app:
 

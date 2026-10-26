@@ -1,4 +1,4 @@
-.PHONY: setup setup-uv setup-node api web agent agent-console agent-start agent-realtime agent-node build lint test test-dom test-ui cert
+.PHONY: setup setup-uv setup-node api web agent agent-console agent-start agent-realtime agent-node build lint test test-dom test-ui cert start serve publish
 
 setup:
 	uv sync
@@ -52,3 +52,15 @@ test-ui:
 
 cert:
 	uv run python gen_cert.py
+
+start:
+	uv run python start.py
+
+serve:
+	uv run python start.py --mode prod --host 0.0.0.0 --port 8000
+
+publish:
+	uv run python start.py --mode prod --https --host 0.0.0.0 --port 8443
+
+publish-ip:
+	uv run python start.py --mode prod --https --host $(IP) --yes --port $(or $(PORT),8443)

@@ -30,3 +30,21 @@ To connect real WebRTC microphone audio and LiveKit Cloud Inference:
    uv run agent.py dev
    ```
 3. Click **Check connection** in the Studio UI, switch the Playground toggle from **Demo** to **Live**, and click **Start session**.
+
+## Publishing on a LAN or Public IP
+
+`start.py` now handles binding and TLS for you:
+
+```bash
+python start.py --host 0.0.0.0                      # dev, reachable on the LAN (HTTP)
+python start.py --host 0.0.0.0 --https              # dev + TLS so the microphone works
+python start.py --mode prod --https --host 0.0.0.0 --port 8443
+python start.py --mode prod --https --host 182.183.90.63 --yes --port 8443
+```
+
+A public IP such as `182.183.90.63` is a router/WAN address, not a local interface: the
+launcher detects that, prints the firewall + port-forwarding plan, and binds `0.0.0.0`
+(only with `--yes`, or after an interactive confirmation). The generated certificate in
+`certs/` lists that IP in its SAN, so `https://182.183.90.63:8443` is a secure context and
+the microphone works. Router setup, CGNAT detection, tunnels, and troubleshooting are in
+[PUBLISH_IP.md](PUBLISH_IP.md).

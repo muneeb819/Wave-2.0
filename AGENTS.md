@@ -58,6 +58,29 @@ Switch the standalone entrypoint to the Realtime speech-to-speech pipeline (`ope
 LIVEKIT_PIPELINE=realtime uv run agent.py dev
 ```
 
+### One-command launcher + IP publishing (`start.py`)
+
+`start.py` runs the API and the Studio together and can bind any interface:
+
+```console
+python start.py                                   # dev (Vite :5173 + API :8000)
+python start.py --host 0.0.0.0                    # dev, reachable on the LAN
+python start.py --host 0.0.0.0 --https            # dev + TLS (microphone works off-localhost)
+python start.py --mode prod --https --host 0.0.0.0 --port 8443
+python start.py --mode prod --https --host <public-ip> --yes --port 8443
+```
+
+Rules that matter:
+
+- Browsers expose `getUserMedia` only in a secure context, so any binding other than
+  `localhost`/`127.0.0.1` needs `--https`; `gen_cert.py` writes a self-signed certificate
+  whose SAN covers every host/IP you publish on.
+- A public IP is not a local interface; `start.py` prints the firewall + port-forwarding
+  plan and only binds `0.0.0.0` when `--yes` is passed (or interactively confirmed).
+- Set `STUDIO_ACCESS_TOKEN` in `.env.local` before exposing the Studio beyond your own
+  network — the token service has no user accounts.
+- Full runbook (router, firewall, CGNAT, tunnels, troubleshooting): `PUBLISH_IP.md`.
+
 ### Full Wave 2.0 Studio Workbench (`inference-studio` dispatch)
 
 Run in separate terminals from the repository root:

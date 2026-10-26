@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import time
 from collections import defaultdict, deque
 from datetime import timedelta
@@ -11,7 +12,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from livekit import api
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,9 +31,18 @@ from .config import (
     write_env_local,
 )
 
+APP_VERSION = "2.0.0"
+STARTED_AT = time.time()
+LOCAL_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+# Vite fingerprints every built file (index-CDzJ3y_0.js, ...-CJOVTJB7.woff), so a URL that
+# contains a hash never changes and can be cached forever.
+FINGERPRINTED_ASSET = re.compile(
+    r"-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico|map)$"
+)
+
 app = FastAPI(
     title="Wave 2.0 Inference Studio API",
-    version="2.0.0",
+    version=APP_VERSION,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     redoc_url=None,
@@ -41,8 +51,17 @@ app = FastAPI(
 rate_limits: dict[str, deque[float]] = defaultdict(deque)
 
 
+def cache_control_for(path: str) -> str:
+    """Cache policy per path: tokens are never cached, hashed assets are immutable."""
+    if FINGERPRINTED_ASSET.search(path):
+        return "public, max-age=31536000, immutable"
+    if path in ("/", "/index.html"):
+        return "no-cache"
+    return "public, max-age=3600"
+
+
 @app.middleware("http")
-async def no_cache_tokens(request: Request, call_next):
+async def security_headers(request: Request, call_next):
     # The frontend and API use a same-origin Vite proxy; reject cross-origin browser POSTs.
     origin = request.headers.get("origin")
     if (
@@ -52,10 +71,48 @@ async def no_cache_tokens(request: Request, call_next):
     ):
         return JSONResponse({"detail": "Cross-origin requests are not allowed."}, status_code=403)
     response = await call_next(request)
-    response.headers["Cache-Control"] = "no-store"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    elif response.status_code == 200 and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = cache_control_for(request.url.path)
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "microphone=*, autoplay=*"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=15552000"
     return response
+
+
+def is_local_request(request: Request) -> bool:
+    """True only for a request from this machine to a loopback host name."""
+    client = request.client
+    peer = client.host if client else ""
+    if peer.startswith("::ffff:"):
+        peer = peer[7:]
+    if peer not in LOCAL_HOSTNAMES:
+        return False
+    hostname = urlparse(f"//{request.headers.get('host', '')}").hostname
+    return hostname in LOCAL_HOSTNAMES
+
+
+def require_write_access(env: dict[str, str], request: Request) -> None:
+    """Refuse anonymous writes from the network when no access token is configured.
+
+    Without this, publishing the Studio on a public IP with an empty
+    `STUDIO_ACCESS_TOKEN` would let anyone rewrite `.env.local` or mint LiveKit
+    sessions (and spend inference credits) from a plain `curl`.
+    """
+    if env["STUDIO_ACCESS_TOKEN"] or is_local_request(request):
+        return
+    raise HTTPException(
+        403,
+        detail={
+            "code": "token_required",
+            "message": "This Studio is reachable from the network without STUDIO_ACCESS_TOKEN. Add one to .env.local to change settings or start sessions remotely.",
+        },
+    )
 
 
 def valid_server_url(value: str) -> bool:
@@ -130,10 +187,12 @@ class BotSettingsUpdate(BaseModel):
 @app.post("/api/bot-settings")
 async def save_bot_settings(
     body: BotSettingsUpdate,
+    request: Request,
     authorization: str | None = Header(default=None),
 ):
     env = environment()
     _verify_studio_token(env, authorization)
+    require_write_access(env, request)
     _, parsed_agent_id = parse_cloud_agent_url(body.agent_url)
     resolved_name = (
         (parsed_agent_id or DEFAULT_CLOUD_AGENT_ID)
@@ -168,10 +227,12 @@ class CredentialsUpdate(BaseModel):
 @app.post("/api/credentials")
 async def save_credentials(
     body: CredentialsUpdate,
+    request: Request,
     authorization: str | None = Header(default=None),
 ):
     env = environment()
     _verify_studio_token(env, authorization)
+    require_write_access(env, request)
     if not valid_server_url(body.livekit_url):
         raise HTTPException(
             422,
@@ -230,6 +291,7 @@ async def create_session(
             },
         )
     _verify_studio_token(env, authorization)
+    require_write_access(env, request)
 
     now = time.monotonic()
     # Do not trust arbitrary X-Forwarded-For headers. Production should use an authenticated user ID.
@@ -304,9 +366,29 @@ async def create_session(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "inference-studio"}
+    """Cheap, unauthenticated readiness probe (used by start.py, publish-wave.ps1, Docker)."""
+    env = environment()
+    return {
+        "status": "ok",
+        "service": "inference-studio",
+        "version": APP_VERSION,
+        "uptime_seconds": int(time.time() - STARTED_AT),
+        "configured": all(env[name] for name in CREDENTIAL_NAMES),
+        "protected": bool(env["STUDIO_ACCESS_TOKEN"]),
+    }
 
 
 # Build once with npm run build, then serve UI + API from this single HTTP process.
 if (ROOT / "dist").is_dir():
     app.mount("/", StaticFiles(directory=ROOT / "dist", html=True), name="frontend")
+else:
+
+    @app.get("/", include_in_schema=False)
+    async def missing_ui_build() -> HTMLResponse:
+        """Explain the empty page instead of returning FastAPI's JSON 404."""
+        return HTMLResponse(
+            "<h1>Wave 2.0 API is running</h1>"
+            "<p>The Studio UI is not built yet. Run <code>pnpm install &amp;&amp; pnpm run build</code> "
+            "(or <code>python start.py --mode prod</code>, which builds it for you), then restart.</p>",
+            status_code=503,
+        )

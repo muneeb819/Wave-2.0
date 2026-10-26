@@ -117,6 +117,21 @@ a secure context, so plain HTTP on an IP silently disables the Live pipeline —
 IP publishing with `--https`. Router port-forwarding, firewall rules, CGNAT detection and a
 troubleshooting table live in **[PUBLISH_IP.md](PUBLISH_IP.md)**.
 
+**Check readiness before you open it to the internet:**
+
+```bash
+python start.py --preflight --mode prod --https --host 182.183.90.63 --port 8443
+```
+
+One line per requirement (Python/packages, Node, `dist/`, `.env.local`, LiveKit credentials,
+access-token strength, port, bind address, certificate SANs) with a non-zero exit code when
+something is blocking.
+
+**Going live for real?** **[DEPLOYMENT.md](DEPLOYMENT.md)** is the complete checklist:
+Windows script, systemd service, Docker/Compose, the security model (token enforcement,
+no anonymous remote writes, TLS headers), verification commands, operations (logs, update,
+rollback, token rotation) and troubleshooting.
+
 ### Step 4: Run the Node.js TypeScript Starter (`agent-node/`)
 
 ```bash

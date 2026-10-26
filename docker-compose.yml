@@ -1,0 +1,83 @@
+# Container deployment for Wave 2.0.
+#
+#   cp .env.example .env.local        # fill in LIVEKIT_* and STUDIO_ACCESS_TOKEN
+#   docker compose --env-file .env.local up -d --build          # https://<host>:8443 (default)
+#   docker compose --env-file .env.local --profile http up -d   # plain HTTP on :8000
+#   docker compose --env-file .env.local --profile agent up -d  # + the LiveKit agent worker
+#
+# HTTPS is the default because browsers only grant microphone access over HTTPS (or
+# localhost). The certificate is self-signed and lives in ./certs (generated on first
+# start, reused afterwards).
+name: wave-studio
+
+services:
+  studio:
+    build:
+      context: .
+      target: studio
+    image: wave-2-studio:2.0.0
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment: &studio-env
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_AGENT_URL: ${LIVEKIT_AGENT_URL:-}
+      LIVEKIT_AGENT_NAME: ${LIVEKIT_AGENT_NAME:-}
+      STUDIO_ACCESS_TOKEN: ${STUDIO_ACCESS_TOKEN:-}
+    volumes:
+      # Certificates are generated on first start and reused afterwards.
+      - ./certs:/app/certs
+    command:
+      - /app/.venv/bin/python
+      - start.py
+      - --mode
+      - prod
+      - --https
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8443"
+      - --no-open
+      - --no-worker
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import ssl,sys,urllib.request;
+          c=ssl._create_unverified_context();
+          sys.exit(0 if urllib.request.urlopen('https://127.0.0.1:8443/api/health',
+          timeout=3, context=c).status == 200 else 1)
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  studio-http:
+    build:
+      context: .
+      target: studio
+    image: wave-2-studio:2.0.0
+    profiles: ["http"]
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment: *studio-env
+
+  # Optional: run the LiveKit agent worker next to the Studio.
+  #   docker compose --env-file .env.local --profile tls --profile agent up -d --build
+  agent:
+    build:
+      context: .
+      target: agent
+    image: wave-2-agent:2.0.0
+    profiles: ["agent"]
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_AGENT_NAME: ${LIVEKIT_AGENT_NAME:-}

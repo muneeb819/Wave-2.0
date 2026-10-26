@@ -599,3 +599,41 @@ that runs this repo. `PUBLISH_IP.md` documents that path, including the CGNAT ca
 StormFiber commonly share addresses, where a tunnel is the only option).
 
 *End of report.*
+
+---
+
+## 17. Live-Deployment Hardening (after `v1.0.0`)
+
+Everything below was implemented and then verified against a real HTTPS instance
+(`start.py --mode prod --https --host 182.183.90.63 --port 8443 --http-port 8080`).
+
+### Fixes
+
+| Area | Before | After |
+|---|---|---|
+| **Anonymous remote writes** | With `STUDIO_ACCESS_TOKEN` unset, any client on the internet could `POST /api/credentials` (rewriting `.env.local`) or mint LiveKit sessions and spend inference credits. | `require_write_access()` now rejects mutating requests from non-loopback clients with `403 token_required` when no token is configured. Loopback stays open so local development needs no setup. |
+| **Static asset caching** | The middleware set `Cache-Control: no-store` on *everything*, so every reload re-downloaded the ~1.1 MB bundle. | API responses are `no-store`; fingerprinted assets (`index-CDzJ3y_0.js`, …) are `public, max-age=31536000, immutable`; `index.html` is `no-cache`; other files 1 hour. |
+| **Security headers** | Only `nosniff` and `Permissions-Policy`. | Added `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: frame-ancestors 'self'` and HSTS (`max-age=15552000`) whenever the response is served over TLS. |
+| **Health endpoint** | `{"status","service"}` only. | Adds `version`, `uptime_seconds`, `configured`, `protected` — enough for Docker/systemd/Uptime checks and the publish scripts. |
+| **Missing UI bundle** | `GET /` returned a bare FastAPI JSON 404 if `dist/` had not been built. | Returns a clear HTML page telling you to run `pnpm run build` (or let `start.py` do it). |
+| **Plain-HTTP first visit** | A browser that tried `http://<ip>:8443` failed the TLS handshake with a confusing error. | `--http-port N` runs a 301 redirect listener (`http://host:8080/…` → `https://host:8443/…`) that keeps the path and query. |
+| **No readiness gate** | You found out about a missing package, busy port or empty token only after the server started. | `python start.py --preflight` prints a pass/warn/fail report (Python, packages, Node, `dist/` freshness, `.env.local`, credential placeholders, token strength, bind address, port, certificate SANs) and exits non-zero on blockers. |
+| **Summary output buffering** | The launch summary was invisible in redirected logs/`journalctl` until the buffer flushed. | Summary and warnings are printed with `flush=True`. |
+| **No network-exposure warning** | Only wildcard binds printed a security note. | `publishing_risks()` warns about anonymous credit use and the router step for any non-loopback host. |
+| **Docker image** | The Dockerfile only ran the agent worker — `docker build .` never produced a Studio and never built the UI. | Multi-stage build: `ui` (pnpm + `pnpm run build`), `python` (uv sync), `agent` (models pre-downloaded) and **`studio` (default)** with `dist/`, non-root user, healthcheck. |
+| **No container/OS deployment path** | Manual commands only. | `docker-compose.yml` (default HTTPS + `http`/`agent` profiles where the default service needs no profile), `deploy/wave-studio.service` (restart-on-crash, boot start, `ExecStartPre=--preflight`, sandboxed), `DEPLOYMENT.md`. |
+| **Reboot survival on Windows** | The Studio stayed dead after a reboot. | `publish-wave.ps1 -InstallAutostart` registers a Task Scheduler job at boot (`-RemoveAutostart` deletes it), and the script now runs `start.py --preflight` before launching. |
+
+### Verification performed
+
+- Pre-flight on a live deployment: `0` failures, `1` warning (public IP is not a local
+  interface, i.e. router forwarding is required); a busy port correctly returns `[FAIL]` and exit code `1`.
+- Token enforcement: `401` without the header, `200` with it; `403 token_required` from a
+  "public host" request when no token is configured; localhost unaffected.
+- Cross-origin `POST` still rejected (`403`).
+- Headers observed on the running instance: immutable asset caching, `no-cache` for
+  `index.html`, HSTS + frame/referrer/CSP on the TLS listener.
+- HTTP→HTTPS redirect: `301` with `Location` preserving `/some/path?x=1`.
+- Graceful shutdown: `SIGTERM` to `start.py` stops uvicorn and both listeners; ports 8443/8080 freed.
+- Suite: `pytest` 106 passed / 1 skipped (the LiveKit-Inference judge is opt-in and calls the
+  real Cloud API), `vitest` 10/10, `ruff` clean, production build clean.

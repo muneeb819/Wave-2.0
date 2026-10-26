@@ -54,6 +54,16 @@
 .PARAMETER StudioAccessToken
     Use this exact token instead of generating one.
 
+.PARAMETER InstallAutostart
+    Register a Task Scheduler job ("Wave 2.0 Studio") that starts the server at boot, so
+    the Studio comes back by itself after a reboot or power cut. Needs administrator rights.
+
+.PARAMETER RemoveAutostart
+    Delete that scheduled task.
+
+.PARAMETER SkipPreflight
+    Skip `start.py --preflight` (the readiness report) before launching.
+
 .PARAMETER SkipInstall
     Do not run uv sync / pnpm install even when dependencies are missing.
 
@@ -97,6 +107,12 @@ param(
     [switch]$RotateToken,
 
     [string]$StudioAccessToken = "",
+
+    [switch]$InstallAutostart,
+
+    [switch]$RemoveAutostart,
+
+    [switch]$SkipPreflight,
 
     [switch]$SkipInstall,
 
@@ -864,6 +880,58 @@ function Invoke-RouterStep {
 }
 
 # --------------------------------------------------------------------------------------
+# Boot persistence (Task Scheduler)
+# --------------------------------------------------------------------------------------
+$AutostartTaskName = "Wave 2.0 Studio"
+
+function Get-AutostartArguments {
+    param([string]$PublicIp, [int]$Port)
+    return "start.py --mode prod --https --host $PublicIp --yes --port $Port --no-open"
+}
+
+function Install-Autostart {
+    param(
+        [string]$Root,
+        [string]$PythonPath,
+        [string]$PublicIp,
+        [int]$Port
+    )
+
+    $action = New-ScheduledTaskAction -Execute $PythonPath `
+        -Argument (Get-AutostartArguments -PublicIp $PublicIp -Port $Port) -WorkingDirectory $Root
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+    try {
+        Register-ScheduledTask -TaskName $AutostartTaskName -Action $action -Trigger $trigger `
+            -Settings $settings -Principal $principal -Force `
+            -Description "Wave 2.0 Studio HTTPS server (https://$PublicIp`:$Port)" | Out-Null
+        Write-Ok "Registered the scheduled task '$AutostartTaskName' (starts at boot)."
+        return $true
+    }
+    catch {
+        Write-Warn "Could not register the scheduled task: $($_.Exception.Message)"
+        Write-Detail "Run once in an elevated PowerShell window:"
+        Write-CommandHint "Register-ScheduledTask -TaskName `"$AutostartTaskName`" -Action (New-ScheduledTaskAction -Execute `"$PythonPath`" -Argument `"$(Get-AutostartArguments -PublicIp $PublicIp -Port $Port)`" -WorkingDirectory `"$Root`") -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal (New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest)"
+        return $false
+    }
+}
+
+function Remove-Autostart {
+    try {
+        Unregister-ScheduledTask -TaskName $AutostartTaskName -Confirm:$false -ErrorAction Stop
+        Write-Ok "Removed the scheduled task '$AutostartTaskName'."
+        return $true
+    }
+    catch {
+        Write-Info "No scheduled task named '$AutostartTaskName' to remove."
+        return $false
+    }
+}
+
+# --------------------------------------------------------------------------------------
 # Launch + verify (Step 1c)
 # --------------------------------------------------------------------------------------
 function Start-Studio {
@@ -992,6 +1060,9 @@ function Invoke-ElevatedRelaunch {
     if ($SkipInstall) { $parts.Add("-SkipInstall") }
     if ($SkipFirewall) { $parts.Add("-SkipFirewall") }
     if ($NoLaunch) { $parts.Add("-NoLaunch") }
+    if ($InstallAutostart) { $parts.Add("-InstallAutostart") }
+    if ($RemoveAutostart) { $parts.Add("-RemoveAutostart") }
+    if ($SkipPreflight) { $parts.Add("-SkipPreflight") }
     $parts.Add("-FirewallProfile"); $parts.Add(($FirewallProfile -join ","))
     # The access token is not forwarded: it is already stored in .env.local, and a
     # secret on a command line would be visible to other users via process listing.
@@ -1049,6 +1120,26 @@ try {
 
     Ensure-Dependencies -Root $Root | Out-Null
     $token = Ensure-StudioAccessToken -Root $Root
+
+    if ($SkipPreflight) {
+        Write-Info "Pre-flight checks skipped (-SkipPreflight)."
+    }
+    else {
+        Write-Info "Running deployment pre-flight checks ..."
+        Write-Host ""
+        & $PythonPath "start.py" "--preflight" "--mode" "prod" "--https" "--host" $PublicIp "--port" "$Port" | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Pre-flight checks failed - fix the [FAIL] lines above and re-run."
+            Write-Detail "To start anyway:  .\publish-wave.ps1 -SkipPreflight"
+            throw "Pre-flight checks failed."
+        }
+        Write-Host ""
+    }
+
+    if ($RemoveAutostart) {
+        $null = Remove-Autostart
+        return
+    }
 
     $InternalAddress = Get-LanAddress
     if (-not $InternalAddress) {
@@ -1113,6 +1204,17 @@ try {
             try { $null = Read-Host "Press Enter to close" } catch { }
         }
         return
+    }
+
+    if ($InstallAutostart) {
+        if (Test-IsAdmin) {
+            Write-Info "Registering boot persistence (Task Scheduler) ..."
+            $null = Install-Autostart -Root $Root -PythonPath $PythonPath -PublicIp $PublicIp -Port $Port
+        }
+        else {
+            Write-Warn "-InstallAutostart needs administrator rights - skipped."
+            Write-Detail "Re-run this script elevated (right-click PowerShell -> Run as administrator)."
+        }
     }
 
     Write-Step "Starting the HTTPS server on port $Port"

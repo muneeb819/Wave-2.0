@@ -82,6 +82,10 @@ Rules that matter:
 - Full runbook (router, firewall, CGNAT, tunnels, troubleshooting): `PUBLISH_IP.md`.
 - Windows: `publish-wave.ps1` wraps the three go-live steps (deps + `.env.local` token,
   router/UPnP, firewall) and then launches `start.py`; keep it in sync when flags change.
+- `python start.py --preflight` is the readiness gate (packages, build, env, token, port,
+  TLS SANs). `publish-wave.ps1` and `deploy/wave-studio.service` both run it; keep
+  `preflight.py` in sync with any new deployment requirement.
+- `DEPLOYMENT.md` is the single go-live guide (Windows/systemd/Docker/security/operations).
 
 ### Full Wave 2.0 Studio Workbench (`inference-studio` dispatch)
 

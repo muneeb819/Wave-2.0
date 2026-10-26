@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 import agent as quickstart_agent
 from backend import config as settings
+from backend import main
 from backend.agent import (
     Assistant,
     attach_dashboard_events,
@@ -44,7 +45,18 @@ def isolated_environment(monkeypatch):
 
 @pytest.fixture
 def client():
-    with TestClient(app) as client:
+    # Loopback peer + loopback Host: the API treats this as "the machine itself",
+    # which is the only way to write settings anonymously (dev without a token).
+    with TestClient(app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000)) as client:
+        yield client
+
+
+@pytest.fixture
+def remote_client():
+    """A browser/curl on another machine: no token must mean no writes."""
+    with TestClient(
+        app, base_url="http://182.183.90.63:8443", client=("203.0.113.7", 50000)
+    ) as client:
         yield client
 
 
@@ -61,7 +73,18 @@ def claims(response):
 
 
 def test_health(client):
-    assert client.get("/api/health").json()["status"] == "ok"
+    body = client.get("/api/health").json()
+    assert body["status"] == "ok"
+    assert body["service"] == "inference-studio"
+    assert body["version"] == "2.0.0"
+    assert isinstance(body["uptime_seconds"], int)
+    assert body["protected"] is False
+
+
+def test_health_reports_token_protection(client, monkeypatch):
+    monkeypatch.setenv("STUDIO_ACCESS_TOKEN", "a-long-public-token-value")
+    body = client.get("/api/health").json()
+    assert body["protected"] is True
 
 
 def test_exact_quickstart_defaults():
@@ -278,7 +301,9 @@ def test_cross_origin_browser_post_rejected(client, configured):
         == 403
     )
     assert (
-        client.post("/api/sessions", json={}, headers={"Origin": "http://testserver"}).status_code
+        client.post(
+            "/api/sessions", json={}, headers={"Origin": "http://127.0.0.1:8000"}
+        ).status_code
         == 200
     )
 
@@ -478,3 +503,70 @@ def test_save_credentials_writes_0600_env_without_exposing_secrets(client, tmp_p
     env_file = tmp_path / ".env.local"
     assert env_file.is_file()
     assert (env_file.stat().st_mode & 0o777) == 0o600
+
+
+# --- Production hardening -------------------------------------------------------------
+def test_static_cache_policy_is_safe_and_effective():
+    """Hashed bundles must be cacheable; index.html and API responses must not be."""
+    assert main.cache_control_for("/assets/index-CDzJ3y_0.js") == (
+        "public, max-age=31536000, immutable"
+    )
+    assert main.cache_control_for("/assets/index-3UTyLq2y.css").endswith("immutable")
+    assert "immutable" in main.cache_control_for(
+        "/assets/jetbrains-mono-latin-500-normal-CJOVTJB7.woff"
+    )
+    assert main.cache_control_for("/") == "no-cache"
+    assert main.cache_control_for("/index.html") == "no-cache"
+    assert "immutable" not in main.cache_control_for("/wave2.0.png")
+
+
+def test_security_headers_on_api_and_static_responses(client):
+    for path in ("/api/health", "/api/status"):
+        response = client.get(path)
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "SAMEORIGIN"
+        assert response.headers["referrer-policy"] == "no-referrer"
+        assert response.headers["content-security-policy"] == "frame-ancestors 'self'"
+        assert response.headers["permissions-policy"] == "microphone=*, autoplay=*"
+        assert response.headers["cache-control"] == "no-store"
+
+
+def test_hsts_only_when_served_over_tls(client):
+    assert "strict-transport-security" not in client.get("/api/health").headers
+    response = client.get("/api/health", headers={"X-Forwarded-Proto": "https"})
+    assert response.headers["strict-transport-security"] == "max-age=15552000"
+
+
+def test_remote_writes_need_a_token_when_none_is_configured(remote_client, configured):
+    """A public deployment without STUDIO_ACCESS_TOKEN must not be puppet-able by curl."""
+    credentials = {
+        "livekit_url": "wss://attacker.livekit.cloud",
+        "api_key": KEY,
+        "api_secret": SECRET,
+    }
+    for path, payload in (
+        ("/api/credentials", credentials),
+        ("/api/bot-settings", {}),
+        ("/api/sessions", {}),
+    ):
+        response = remote_client.post(path, json=payload)
+        assert response.status_code == 403, (path, response.text)
+        assert response.json()["detail"]["code"] == "token_required"
+
+
+def test_remote_writes_are_allowed_with_the_configured_token(
+    remote_client, configured, monkeypatch
+):
+    token = "remote-token-0123456789abcdef"
+    monkeypatch.setenv("STUDIO_ACCESS_TOKEN", token)
+    allowed = remote_client.post(
+        "/api/sessions", json={}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert allowed.status_code == 200
+    denied = remote_client.post("/api/sessions", json={})
+    assert denied.status_code == 401
+
+
+def test_local_writes_stay_open_for_development(client, configured):
+    """localhost keeps working without a token so `python start.py` needs no setup."""
+    assert client.post("/api/sessions", json={}).status_code == 200

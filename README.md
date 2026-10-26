@@ -149,6 +149,8 @@ cd agent-node && pnpm run typecheck && pnpm test
 
 # Run multi-turn LiveKit Cloud conversation simulations (requires LiveKit Cloud auth)
 lk agent simulate text --scenarios scenarios.yaml
+# CI runs the same command on `main`; the job skips cleanly with a notice when the
+# LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET repository secrets are not set.
 ```
 
 > **Python discovery in the Studio test suite:** `pnpm run test:dom` always verifies the

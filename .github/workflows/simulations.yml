@@ -1,4 +1,9 @@
 # Runs multi-turn voice agent simulations defined in scenarios.yaml on LiveKit Cloud.
+#
+# These simulations spend LiveKit Cloud inference credits, so every step is gated on
+# LIVEKIT_API_KEY / LIVEKIT_API_SECRET being configured for the repository. When the
+# secrets are absent (forks, fresh clones, local CI) the job finishes green with a
+# notice instead of failing on an unauthenticated `lk` command.
 name: Simulations
 
 on:
@@ -19,24 +24,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check LiveKit Cloud credentials
+        id: credentials
+        run: |
+          if [ -z "${LIVEKIT_API_KEY:-}" ] || [ -z "${LIVEKIT_API_SECRET:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Simulations skipped::LIVEKIT_API_KEY / LIVEKIT_API_SECRET are not configured for this repository."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install uv
+        if: steps.credentials.outputs.configured == 'true'
         uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
 
       - name: Set up Python
+        if: steps.credentials.outputs.configured == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
+        if: steps.credentials.outputs.configured == 'true'
         run: uv sync
 
       - name: Download model files
+        if: steps.credentials.outputs.configured == 'true'
         run: uv run python agent.py download-files
 
       - name: Install LiveKit CLI
+        if: steps.credentials.outputs.configured == 'true'
         run: curl -sSL https://get.livekit.io/cli | bash
 
       - name: Run simulations
+        if: steps.credentials.outputs.configured == 'true'
         run: lk agent simulate text --scenarios scenarios.yaml

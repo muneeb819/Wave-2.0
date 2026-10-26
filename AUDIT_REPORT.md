@@ -508,6 +508,39 @@ anything useful — the test crashed instead of failing gracefully.
 
 All fixes are merged to `main` via this branch.
 
+---
+
+## 16. IP Publishing Support (added after the audit)
+
+The Studio previously bound `127.0.0.1`/`0.0.0.0` via env-less scripts and had no TLS path
+other than a localhost-only certificate. Publishing on a real IP needed a supported route,
+so this round adds:
+
+| Area | Change |
+|---|---|
+| `start.py` | Rewritten as an argparse launcher: `--host`, `--port`, `--api-port`, `--mode dev\|prod`, `--https`, `--cert/--key`, `--force-build`, `--no-open`, `--no-worker`, `--yes`. Detects addresses the machine does not own and prints firewall + port-forwarding + CGNAT guidance instead of an `Errno 99` traceback. Tracks child processes so Ctrl+C stops uvicorn/Vite cleanly. |
+| `gen_cert.py` | `--host` (repeatable) and `--local-addresses`; SAN now covers every requested DNS name/IP. Key file written `0600`. `certificate_hosts()` reads SANs back for diagnostics/tests. |
+| `vite.config.ts` | `VITE_HOST`, `VITE_PORT`, `VITE_API_TARGET`, `VITE_HTTPS_KEY`/`VITE_HTTPS_CERT` so the dev server can serve TLS and proxy to an HTTPS API. Added `@types/node` for the config's `fs`/`process` usage. |
+| `package.json` | `pnpm run serve` (prod HTTP on `0.0.0.0:8000`) and `pnpm run publish` (prod HTTPS on `0.0.0.0:8443`). |
+| Docs | New `PUBLISH_IP.md` runbook (router, firewall per OS, CGNAT, tunnels, verification, security checklist, troubleshooting), README "Step 3b", AGENTS.md launcher rules, Makefile `publish`/`publish-ip` targets, `.env.example` publishing note. |
+| Tests | `tests/test_publish.py` — 25 offline tests for SAN coverage, host normalisation, URL building, bindability, guidance text, and CLI behaviour. |
+
+**Verified in this workspace (HTTPS production mode on `:8443`):**
+
+- Certificate SAN: `DNS:localhost, IP 127.0.0.1, IP ::1, IP 169.254.0.21, IP 182.183.90.63`
+- `GET /` with `Host: 182.183.90.63:8443` → Studio HTML (200)
+- `POST /api/sessions` with `Origin: https://182.183.90.63:8443` → `503 not_configured`
+  (origin accepted; only credentials are missing)
+- Same POST with `Origin: https://evil.example` → `403` (cross-origin still blocked)
+- `python start.py --host 182.183.90.63` without `--yes` → exits `2` with the full
+  port-forwarding plan instead of crashing
+- Vite dev server over TLS proxying to the HTTPS API → `200 /api/health`
+
+**Reality check:** `182.183.90.63` is a WAN address, not an interface on this sandbox or on
+most hosts, so nothing can bind it directly — traffic has to be port-forwarded to a machine
+that runs this repo. `PUBLISH_IP.md` documents that path, including the CGNAT case (PTCL /
+StormFiber commonly share addresses, where a tunnel is the only option).
+
 *End of report.*
 
 ---
@@ -531,5 +564,38 @@ Pull requests merged:
 
 `main` is the source of truth and is fully green. Local preview is running at `:5173` (Studio) and
 `:8000` (API).
+
+---
+
+## 16. IP Publishing Support (added after the audit)
+
+The Studio previously bound `127.0.0.1`/`0.0.0.0` via env-less scripts and had no TLS path
+other than a localhost-only certificate. Publishing on a real IP needed a supported route,
+so this round adds:
+
+| Area | Change |
+|---|---|
+| `start.py` | Rewritten as an argparse launcher: `--host`, `--port`, `--api-port`, `--mode dev\|prod`, `--https`, `--cert/--key`, `--force-build`, `--no-open`, `--no-worker`, `--yes`. Detects addresses the machine does not own and prints firewall + port-forwarding + CGNAT guidance instead of an `Errno 99` traceback. Tracks child processes so Ctrl+C stops uvicorn/Vite cleanly. |
+| `gen_cert.py` | `--host` (repeatable) and `--local-addresses`; SAN now covers every requested DNS name/IP. Key file written `0600`. `certificate_hosts()` reads SANs back for diagnostics/tests. |
+| `vite.config.ts` | `VITE_HOST`, `VITE_PORT`, `VITE_API_TARGET`, `VITE_HTTPS_KEY`/`VITE_HTTPS_CERT` so the dev server can serve TLS and proxy to an HTTPS API. Added `@types/node` for the config's `fs`/`process` usage. |
+| `package.json` | `pnpm run serve` (prod HTTP on `0.0.0.0:8000`) and `pnpm run publish` (prod HTTPS on `0.0.0.0:8443`). |
+| Docs | New `PUBLISH_IP.md` runbook (router, firewall per OS, CGNAT, tunnels, verification, security checklist, troubleshooting), README "Step 3b", AGENTS.md launcher rules, Makefile `publish`/`publish-ip` targets, `.env.example` publishing note. |
+| Tests | `tests/test_publish.py` — 25 offline tests for SAN coverage, host normalisation, URL building, bindability, guidance text, and CLI behaviour. |
+
+**Verified in this workspace (HTTPS production mode on `:8443`):**
+
+- Certificate SAN: `DNS:localhost, IP 127.0.0.1, IP ::1, IP 169.254.0.21, IP 182.183.90.63`
+- `GET /` with `Host: 182.183.90.63:8443` → Studio HTML (200)
+- `POST /api/sessions` with `Origin: https://182.183.90.63:8443` → `503 not_configured`
+  (origin accepted; only credentials are missing)
+- Same POST with `Origin: https://evil.example` → `403` (cross-origin still blocked)
+- `python start.py --host 182.183.90.63` without `--yes` → exits `2` with the full
+  port-forwarding plan instead of crashing
+- Vite dev server over TLS proxying to the HTTPS API → `200 /api/health`
+
+**Reality check:** `182.183.90.63` is a WAN address, not an interface on this sandbox or on
+most hosts, so nothing can bind it directly — traffic has to be port-forwarded to a machine
+that runs this repo. `PUBLISH_IP.md` documents that path, including the CGNAT case (PTCL /
+StormFiber commonly share addresses, where a tunnel is the only option).
 
 *End of report.*

@@ -85,6 +85,30 @@ pnpm install
 pnpm run dev
 ```
 
+### Step 3b: One-command launcher (dev, LAN, or public IP)
+
+`start.py` replaces the two terminals above and can bind any interface, with optional TLS:
+
+```bash
+python start.py                                  # dev: Vite :5173 + API :8000, opens a browser
+python start.py --host 0.0.0.0                   # same, reachable from your LAN
+python start.py --host 0.0.0.0 --https           # LAN + TLS so the microphone works
+pnpm run serve                                   # production build on 0.0.0.0:8000
+pnpm run publish                                 # production + HTTPS on 0.0.0.0:8443
+```
+
+**Publishing on an IP address** (e.g. your public IP `182.183.90.63`):
+
+```bash
+python start.py --mode prod --https --host 182.183.90.63 --yes --port 8443
+```
+
+This binds every interface, generates a self-signed certificate that lists that IP in its
+SAN, and serves the UI and API from one process. Browsers only allow microphone access in
+a secure context, so plain HTTP on an IP silently disables the Live pipeline — always pair
+IP publishing with `--https`. Router port-forwarding, firewall rules, CGNAT detection and a
+troubleshooting table live in **[PUBLISH_IP.md](PUBLISH_IP.md)**.
+
 ### Step 4: Run the Node.js TypeScript Starter (`agent-node/`)
 
 ```bash

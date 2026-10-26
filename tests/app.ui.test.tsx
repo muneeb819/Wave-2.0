@@ -262,18 +262,32 @@ describe("Wave 2.0 Studio Workbench UI & Code Generation", () => {
       "CA_tBWDFVRz7pZS",
     );
     const verify = spawnSync(
-      "python",
-      [
-        "-c",
-        [
-          "import sys",
-          "from livekit import api",
-          "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
-          "claims = verifier.verify(sys.stdin.read().strip())",
-          "assert claims.video.room_join is True",
-          "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
-        ].join("\n"),
-      ],
+      process.env.VITEST_PYTHON_BIN || "uv",
+      process.env.VITEST_PYTHON_BIN
+        ? [
+            "-c",
+            [
+              "import sys",
+              "from livekit import api",
+              "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
+              "claims = verifier.verify(sys.stdin.read().strip())",
+              "assert claims.video.room_join is True",
+              "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
+            ].join("\n"),
+          ]
+        : [
+            "run",
+            "python",
+            "-c",
+            [
+              "import sys",
+              "from livekit import api",
+              "verifier = api.TokenVerifier('APItestKey123', 'super-secret-livekit-key-at-least-32-chars')",
+              "claims = verifier.verify(sys.stdin.read().strip())",
+              "assert claims.video.room_join is True",
+              "assert claims.room_config.agents[0].agent_name == 'CA_tBWDFVRz7pZS'",
+            ].join("\n"),
+          ],
       { input: minted.participant_token },
     );
     expect(verify.status, verify.stderr.toString()).toBe(0);

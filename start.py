@@ -36,7 +36,7 @@ def resolve_python() -> str:
 def resolve_vite_cmd() -> list[str]:
     local_bin = ROOT / "node_modules" / ".bin" / ("vite.cmd" if os.name == "nt" else "vite")
     if local_bin.is_file():
-        return [str(local_bin), "--host", "127.0.0.1", "--port", "5173"]
+        return [str(local_bin), "--host", "0.0.0.0", "--port", "5173"]
     for pm in ("pnpm", "npm"):
         exe = shutil.which(pm)
         if exe:
@@ -103,7 +103,7 @@ def main() -> int:
                 "uvicorn",
                 "backend.main:app",
                 "--host",
-                "127.0.0.1",
+                "0.0.0.0",
                 "--port",
                 "8000",
                 "--no-proxy-headers",

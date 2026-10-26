@@ -200,7 +200,7 @@ pasting the token in *Configuration → Access token*, and the mic works (HTTPS)
 | Start / stop / restart | `systemctl start\|stop\|restart wave-studio` or `docker compose restart studio` |
 | Logs | `journalctl -u wave-studio -f` / `docker compose logs -f` |
 | Update | `git pull && uv sync && pnpm install && pnpm run build && systemctl restart wave-studio` |
-| Roll back | `git checkout v1.0.0 && … && systemctl restart wave-studio` |
+| Roll back | `git checkout <previous-release-tag>` (e.g. `v1.0.0`), then `uv sync && pnpm run build && systemctl restart wave-studio` |
 | Rotate the access token | `publish-wave.ps1 -RotateToken` or edit `.env.local` and restart |
 | Certificates | regenerate with `python gen_cert.py --host <ip> --local-addresses`; `certs/` is git-ignored |
 | Back up | `.env.local` and `certs/` only — everything else is reproducible from Git |

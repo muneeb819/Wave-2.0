@@ -1,3 +1,4 @@
+import { HistoryEntrySchema } from "../schemas";
 import { formatTime, getModel } from "../types";
 import type { Config, HistoryEntry, Metrics } from "../types";
 
@@ -52,7 +53,15 @@ export function loadHistory(): HistoryEntry[] {
     const value = JSON.parse(
       sessionStorage.getItem(HISTORY_STORAGE_KEY) || "[]",
     );
-    return Array.isArray(value) ? value.slice(0, 20) : [];
+    if (!Array.isArray(value)) return [];
+    const valid: HistoryEntry[] = [];
+    for (const candidate of value.slice(0, 20)) {
+      const parsed = HistoryEntrySchema.safeParse(candidate);
+      if (parsed.success) {
+        valid.push(parsed.data as HistoryEntry);
+      }
+    }
+    return valid;
   } catch {
     return [];
   }

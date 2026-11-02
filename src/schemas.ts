@@ -89,7 +89,7 @@ export const ConfigSchema = z
     language: z
       .string()
       .refine((v) => languageIds.has(v), "Unsupported language code"),
-    turn_detection: z.enum(["turn_detector", "vad", "stt"]),
+    turn_detection: z.enum(["multilingual", "turn_detector", "vad", "stt"]),
     noise_cancellation: z.boolean(),
     preemptive_generation: z.boolean(),
     expressive: z.boolean(),
@@ -131,3 +131,30 @@ export const SessionMintResponseSchema = z
     expires_in: z.number().int().positive().optional(),
   })
   .passthrough();
+
+export const ChatMessageSchema = z.object({
+  id: z.string().min(1).max(128),
+  role: z.enum(["user", "assistant"]),
+  text: z.string().max(16000),
+  timestamp: z.number().finite(),
+  interrupted: z.boolean().optional(),
+});
+
+export const MetricsSchema = z.object({
+  transcription_ms: z.number().nullable(),
+  endpointing_ms: z.number().nullable(),
+  llm_ms: z.number().nullable(),
+  tts_ms: z.number().nullable(),
+  tokens: z.number().nullable(),
+});
+
+export const HistoryEntrySchema = z.object({
+  id: z.string().min(1).max(128),
+  mode: z.enum(["demo", "live"]),
+  startedAt: z.number().finite(),
+  duration: z.number().nonnegative(),
+  config: ConfigSchema,
+  messages: z.array(ChatMessageSchema).max(500),
+  metrics: MetricsSchema,
+});
+

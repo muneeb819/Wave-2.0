@@ -182,10 +182,16 @@ export function readBotSettings(): BotSettings {
       ) {
         next.dispatchMode = saved.dispatchMode;
       }
-      if (typeof saved.customAgentName === "string") {
-        next.customAgentName = saved.customAgentName;
+      if (
+        typeof saved.customAgentName === "string" &&
+        /^[A-Za-z0-9._-]{0,128}$/.test(saved.customAgentName.trim())
+      ) {
+        next.customAgentName = saved.customAgentName.trim();
       }
-      if (typeof saved.sandboxId === "string") {
+      if (
+        typeof saved.sandboxId === "string" &&
+        /^[A-Za-z0-9._-]{0,128}$/.test(saved.sandboxId.trim())
+      ) {
         next.sandboxId = saved.sandboxId.trim();
       }
     }

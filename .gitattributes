@@ -1,0 +1,5 @@
+docs/** linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+package-lock.json linguist-generated=true
+uv.lock linguist-generated=true
+agent-node/pnpm-lock.yaml linguist-generated=true

@@ -365,3 +365,23 @@ def test_ci_workflow_gates_pr_with_explicit_lint_typecheck_and_test_steps():
     assert any("tsc --noEmit" in cmd for cmd in frontend_steps)
     assert any("pnpm test" in cmd for cmd in frontend_steps)
     assert any("vitest run --coverage" in cmd for cmd in frontend_steps)
+
+
+def test_zero_code_files_exceed_five_hundred_sloc():
+    import subprocess
+
+    exts = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+    proc = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True)
+    oversized: list[tuple[str, int]] = []
+    for rel in proc.stdout.splitlines():
+        path = ROOT / rel
+        if not path.is_file() or path.suffix not in exts:
+            continue
+        lines = [
+            ln
+            for ln in path.read_text("utf-8", errors="ignore").splitlines()
+            if ln.strip() and not ln.strip().startswith(("#", "//"))
+        ]
+        if len(lines) > 500:
+            oversized.append((rel, len(lines)))
+    assert oversized == [], f"Code files exceeding 500 SLOC: {oversized}"

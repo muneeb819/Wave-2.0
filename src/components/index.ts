@@ -4,6 +4,7 @@ export { CodeBlock } from "./CodeBlock";
 export { CopyButton } from "./CopyButton";
 export { EmptyState } from "./EmptyState";
 export { Equalizer } from "./Equalizer";
+export { ErrorBoundary } from "./ErrorBoundary";
 export { FeatureRow } from "./FeatureRow";
 export { IntroMic } from "./IntroMic";
 export { LiveKitLogo } from "./LiveKitLogo";

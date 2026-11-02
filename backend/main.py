@@ -33,6 +33,13 @@ from .config import (
     parse_cloud_agent_url,
     write_env_local,
 )
+from .observability import (
+    configure_error_tracking,
+    counters,
+    error_tracking_enabled,
+    record_request,
+    unhandled_exception_handler,
+)
 
 APP_VERSION = "2.0.0"
 STARTED_AT = time.time()
@@ -63,6 +70,8 @@ structlog.configure(
 )
 logger = structlog.get_logger("inference-studio.api")
 
+configure_error_tracking(APP_VERSION)
+
 app = FastAPI(
     title="Wave 2.0 Inference Studio API",
     version=APP_VERSION,
@@ -70,6 +79,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     redoc_url=None,
 )
+app.add_exception_handler(Exception, unhandled_exception_handler)
 # A per-process, in-memory development limiter. Use a shared limiter behind production auth.
 rate_limits: dict[str, deque[float]] = defaultdict(deque)
 
@@ -133,6 +143,7 @@ async def security_headers(request: Request, call_next):
         if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
             response.headers["Strict-Transport-Security"] = "max-age=15552000"
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        record_request(response.status_code)
         logger.info(
             "http_request",
             method=request.method,
@@ -414,6 +425,7 @@ async def create_session(
         .with_room_config(room_config)
         .to_jwt()
     )
+    counters.sessions_minted_total += 1
     return {
         "server_url": env["LIVEKIT_URL"],
         "participant_token": token,
@@ -435,6 +447,8 @@ async def health():
         "uptime_seconds": int(time.time() - STARTED_AT),
         "configured": all(env[name] for name in CREDENTIAL_NAMES),
         "protected": bool(env["STUDIO_ACCESS_TOKEN"]),
+        "error_tracking": error_tracking_enabled(),
+        "metrics": counters.snapshot(),
     }
 
 

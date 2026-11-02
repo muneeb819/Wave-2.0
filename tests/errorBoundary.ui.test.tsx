@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 function CrashableView() {
-  const [crash, setCrash] = useState(true);
+  const [crash] = useState(true);
   if (crash) {
     throw new Error("Simulated pipeline widget failure");
   }

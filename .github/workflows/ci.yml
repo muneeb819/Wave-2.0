@@ -70,6 +70,7 @@ jobs:
           VITEST_PYTHON_BIN: python
         run: |
           pnpm install
+          pnpm run lint
           pnpm run test:dom
           pnpm run build
 

@@ -97,10 +97,16 @@ export default function App() {
     saveConfig(config);
   }, [config]);
 
+  const {
+    active: sessionActive,
+    start: startSession,
+    stop: stopSession,
+  } = session;
+
   const onStart = useCallback(
     (requestedMode?: SessionMode) => {
-      if (session.active) {
-        session.stop();
+      if (sessionActive) {
+        stopSession();
         return;
       }
       const mode = requestedMode || selectedMode;
@@ -114,12 +120,12 @@ export default function App() {
         setModal("connect");
         return;
       }
-      void session.start(mode, accessToken);
+      void startSession(mode, accessToken);
     },
     [
-      session.active,
-      session.start,
-      session.stop,
+      sessionActive,
+      startSession,
+      stopSession,
       selectedMode,
       isLiveReady,
       botSettings.sandboxId,

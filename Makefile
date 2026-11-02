@@ -39,6 +39,7 @@ build:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
+	pnpm run lint
 
 test:
 	uv run pytest -q

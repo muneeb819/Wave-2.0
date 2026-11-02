@@ -336,3 +336,16 @@ def test_preflight_json_report_and_cli_flag(tmp_path: Path, launcher):
     parsed_args = launcher.parse_args(["--preflight", "--json", "--host", "127.0.0.1"])
     assert parsed_args.preflight is True
     assert parsed_args.json is True
+
+
+def test_pyproject_uses_compatible_ranges_and_renovate_config_is_valid():
+    import json
+
+    import tomllib
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    for dep in pyproject["project"]["dependencies"]:
+        assert "==" not in dep, f"Top-level dependency should use bounded range, not ==: {dep}"
+
+    renovate = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
+    assert "config:recommended" in renovate["extends"]

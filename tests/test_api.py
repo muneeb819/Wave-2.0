@@ -603,3 +603,20 @@ def test_structured_logging_and_request_id_propagation(client, capsys):
     sanitized = client.get("/api/health", headers={"X-Request-ID": "bad id with spaces!"})
     assert sanitized.headers["x-request-id"] != "bad id with spaces!"
     assert len(sanitized.headers["x-request-id"]) == 32
+
+
+def test_models_endpoint_supports_stage_and_provider_filtering(client):
+    all_models = client.get("/api/models")
+    assert all_models.status_code == 200
+    body = all_models.json()
+    assert {"stt", "llm", "tts", "realtime"} <= set(body["stages"].keys())
+    assert body["defaults"]["stt"] == "assemblyai/universal-3-6-pro"
+
+    filtered = client.get("/api/models", params={"stage": "llm", "provider": "google"})
+    assert filtered.status_code == 200
+    llm_items = filtered.json()["stages"]["llm"]
+    assert llm_items and all(item["id"].startswith("google/") for item in llm_items)
+
+    bad_stage = client.get("/api/models", params={"stage": "unknown"})
+    assert bad_stage.status_code == 400
+    assert bad_stage.json()["detail"]["code"] == "invalid_stage"

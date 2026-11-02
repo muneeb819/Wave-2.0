@@ -26,11 +26,13 @@ from .config import (
     DEFAULT_CLOUD_AGENT_URL,
     DEFAULT_CLOUD_PROJECT_ID,
     DEFAULT_CLOUD_URL_HINT,
+    DEFAULTS,
     ROOT,
     SessionConfig,
     active_secret_provider,
     agent_name,
     environment,
+    list_catalog_models,
     parse_cloud_agent_url,
     write_env_local,
 )
@@ -436,6 +438,19 @@ async def create_session(
         "pipeline": body.config.pipeline,
         "expires_in": 600,
     }
+
+
+@app.get("/api/models")
+def get_models(stage: str | None = None, provider: str | None = None) -> dict[str, object]:
+    """List allowlisted inference models grouped by pipeline stage."""
+    try:
+        catalog = list_catalog_models(stage=stage, provider=provider)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_stage", "message": str(exc)},
+        ) from exc
+    return {"stages": catalog, "defaults": DEFAULTS}
 
 
 @app.get("/api/health")

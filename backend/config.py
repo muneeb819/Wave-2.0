@@ -51,6 +51,32 @@ def environment() -> dict[str, str]:
     return resolve_configuration(names, file_values)
 
 
+MODEL_STAGES = ("stt", "llm", "tts", "realtime")
+
+
+def list_catalog_models(
+    stage: str | None = None,
+    provider: str | None = None,
+) -> dict[str, list[dict[str, object]]]:
+    """Return allowlisted inference models grouped by stage, optionally filtered."""
+    stages = (stage,) if stage else MODEL_STAGES
+    for selected in stages:
+        if selected not in MODEL_STAGES:
+            raise ValueError(f"Unknown pipeline stage: {selected}")
+    provider_filter = (provider or "").strip().lower()
+    result: dict[str, list[dict[str, object]]] = {}
+    for selected in stages:
+        entries: list[dict[str, object]] = []
+        for model in CATALOG[selected]:
+            vendor = str(model["id"]).split("/", 1)[0].lower()
+            provider_label = str(model.get("provider", vendor)).lower()
+            if provider_filter and provider_filter not in (vendor, provider_label):
+                continue
+            entries.append(dict(model))
+        result[selected] = entries
+    return result
+
+
 __all__ = [
     "CATALOG",
     "CREDENTIAL_NAMES",
@@ -64,6 +90,7 @@ __all__ = [
     "active_secret_provider",
     "agent_name",
     "environment",
+    "list_catalog_models",
     "parse_cloud_agent_url",
     "write_env_local",
 ]

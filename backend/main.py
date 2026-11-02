@@ -1,14 +1,10 @@
-"""Small development token service. Add application auth before public deployment."""
+"""Wave 2.0 FastAPI control and room-scoped LiveKit token service."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
 import os
-import re
 import time
-from collections import defaultdict, deque
 from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -43,16 +39,20 @@ from .observability import (
     record_request,
     unhandled_exception_handler,
 )
+from .security_guards import (
+    cache_control_for,
+    enforce_session_rate_limit,
+    rate_limits,
+    require_write_access,
+    resolve_request_id,
+    valid_server_url,
+    verify_studio_token,
+)
+
+__all__ = ["app", "cache_control_for", "rate_limits"]
 
 APP_VERSION = "2.0.0"
 STARTED_AT = time.time()
-LOCAL_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
-# Vite fingerprints every built file (index-CDzJ3y_0.js, ...-CJOVTJB7.woff), so a URL that
-# contains a hash never changes and can be cached forever.
-FINGERPRINTED_ASSET = re.compile(
-    r"-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico|map)$"
-)
-REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 _LOG_LEVEL_NAME = os.environ.get("LOG_LEVEL", "INFO").upper()
 _LOG_LEVEL = getattr(logging, _LOG_LEVEL_NAME, logging.INFO)
@@ -83,25 +83,6 @@ app = FastAPI(
     redoc_url=None,
 )
 app.add_exception_handler(Exception, unhandled_exception_handler)
-# A per-process, in-memory development limiter. Use a shared limiter behind production auth.
-rate_limits: dict[str, deque[float]] = defaultdict(deque)
-
-
-def cache_control_for(path: str) -> str:
-    """Cache policy per path: tokens are never cached, hashed assets are immutable."""
-    if FINGERPRINTED_ASSET.search(path):
-        return "public, max-age=31536000, immutable"
-    if path in ("/", "/index.html"):
-        return "no-cache"
-    return "public, max-age=3600"
-
-
-def resolve_request_id(incoming: str | None) -> str:
-    """Propagate a safe caller-supplied X-Request-ID or mint a fresh identifier."""
-    candidate = (incoming or "").strip()
-    if candidate and REQUEST_ID_PATTERN.match(candidate):
-        return candidate
-    return uuid4().hex
 
 
 @app.middleware("http")
@@ -111,7 +92,6 @@ async def security_headers(request: Request, call_next):
     structlog.contextvars.bind_contextvars(request_id=request_id)
     started = time.perf_counter()
     try:
-        # The frontend and API use a same-origin Vite proxy; reject cross-origin browser POSTs.
         origin = request.headers.get("origin")
         if (
             request.method == "POST"
@@ -159,67 +139,6 @@ async def security_headers(request: Request, call_next):
         structlog.contextvars.clear_contextvars()
 
 
-def is_local_request(request: Request) -> bool:
-    """True only for a request from this machine to a loopback host name."""
-    client = request.client
-    peer = client.host if client else ""
-    if peer.startswith("::ffff:"):
-        peer = peer[7:]
-    if peer not in LOCAL_HOSTNAMES:
-        return False
-    hostname = urlparse(f"//{request.headers.get('host', '')}").hostname
-    return hostname in LOCAL_HOSTNAMES
-
-
-def require_write_access(env: dict[str, str], request: Request) -> None:
-    """Refuse anonymous writes from the network when no access token is configured.
-
-    Without this, publishing the Studio on a public IP with an empty
-    `STUDIO_ACCESS_TOKEN` would let anyone rewrite `.env.local` or mint LiveKit
-    sessions (and spend inference credits) from a plain `curl`.
-    """
-    if env["STUDIO_ACCESS_TOKEN"] or is_local_request(request):
-        return
-    raise HTTPException(
-        403,
-        detail={
-            "code": "token_required",
-            "message": "This Studio is reachable from the network without STUDIO_ACCESS_TOKEN. Add one to .env.local to change settings or start sessions remotely.",
-        },
-    )
-
-
-def valid_server_url(value: str) -> bool:
-    try:
-        parsed = urlparse(value)
-        _ = parsed.port  # Validate the port and bracketed IPv6, if present.
-        allowed_scheme = parsed.scheme == "wss" or (
-            parsed.scheme == "ws" and parsed.hostname in ("localhost", "127.0.0.1", "::1")
-        )
-        return bool(
-            allowed_scheme
-            and parsed.hostname
-            and not parsed.username
-            and not parsed.password
-            and not any(c.isspace() for c in value)
-        )
-    except ValueError:
-        return False
-
-
-def _verify_studio_token(env: dict[str, str], authorization: str | None) -> None:
-    if env["STUDIO_ACCESS_TOKEN"]:
-        expected = f"Bearer {env['STUDIO_ACCESS_TOKEN']}"
-        if not hmac.compare_digest((authorization or "").encode(), expected.encode()):
-            raise HTTPException(
-                401,
-                detail={
-                    "code": "unauthorized",
-                    "message": "Enter your Studio access token in the connection settings.",
-                },
-            )
-
-
 @app.get("/api/status")
 async def status():
     env = environment()
@@ -244,7 +163,10 @@ async def status():
         "server_host": urlparse(env["LIVEKIT_URL"]).hostname
         if env["LIVEKIT_URL"] and valid_url
         else None,
-        "note": "Configured does not mean an agent is running. Start the Python or Node.js worker separately, or dispatch your LiveKit Cloud agent directly.",
+        "note": (
+            "Configured does not mean an agent is running. Start the Python or Node.js worker "
+            "separately, or dispatch your LiveKit Cloud agent directly."
+        ),
     }
 
 
@@ -266,7 +188,7 @@ async def save_bot_settings(
     authorization: str | None = Header(default=None),
 ):
     env = environment()
-    _verify_studio_token(env, authorization)
+    verify_studio_token(env, authorization)
     require_write_access(env, request)
     _, parsed_agent_id = parse_cloud_agent_url(body.agent_url)
     resolved_name = (
@@ -306,21 +228,21 @@ async def save_credentials(
     authorization: str | None = Header(default=None),
 ):
     env = environment()
-    _verify_studio_token(env, authorization)
+    verify_studio_token(env, authorization)
     require_write_access(env, request)
     if not valid_server_url(body.livekit_url):
         raise HTTPException(
             422,
             detail={
                 "code": "invalid_url",
-                "message": "LIVEKIT_URL must be a valid wss:// LiveKit Cloud URL (e.g. wss://your-project.livekit.cloud) or ws://localhost:7880.",
+                "message": (
+                    "LIVEKIT_URL must be a valid wss:// LiveKit Cloud URL "
+                    "(e.g. wss://your-project.livekit.cloud) or ws://localhost:7880."
+                ),
             },
         )
     _, parsed_agent_id = parse_cloud_agent_url(body.agent_url)
-    resolved_agent_name = body.agent_name
-    if not resolved_agent_name and parsed_agent_id:
-        resolved_agent_name = parsed_agent_id
-
+    resolved_agent_name = body.agent_name or parsed_agent_id or ""
     write_env_local(
         {
             "LIVEKIT_URL": body.livekit_url,
@@ -353,7 +275,10 @@ async def create_session(
             503,
             detail={
                 "code": "not_configured",
-                "message": "Add LiveKit Cloud credentials to .env.local or configure your bot in Studio settings first.",
+                "message": (
+                    "Add LiveKit Cloud credentials to .env.local or configure your bot "
+                    "in Studio settings first."
+                ),
                 "missing": missing,
             },
         )
@@ -362,36 +287,15 @@ async def create_session(
             503,
             detail={
                 "code": "invalid_url",
-                "message": "LIVEKIT_URL must be a valid wss:// LiveKit Cloud URL (or ws://localhost for self-hosting).",
+                "message": (
+                    "LIVEKIT_URL must be a valid wss:// LiveKit Cloud URL "
+                    "(or ws://localhost for self-hosting)."
+                ),
             },
         )
-    _verify_studio_token(env, authorization)
+    verify_studio_token(env, authorization)
     require_write_access(env, request)
-
-    now = time.monotonic()
-    # Do not trust arbitrary X-Forwarded-For headers. Production should use an authenticated user ID.
-    client_ip = request.client.host if request.client else "unknown"
-    limiter_key = hashlib.sha256(client_ip.encode()).hexdigest()
-    if limiter_key not in rate_limits and len(rate_limits) >= 4096:
-        del rate_limits[next(iter(rate_limits))]
-    bucket = rate_limits[limiter_key]
-    while bucket and bucket[0] < now - 60:
-        bucket.popleft()
-    if len(bucket) >= 8:
-        raise HTTPException(
-            429,
-            detail={
-                "code": "rate_limited",
-                "message": "Too many session requests. Please wait a minute.",
-            },
-            headers={"Retry-After": "60"},
-        )
-    bucket.append(now)
-    # Bound memory even if the development server receives many distinct IPs.
-    if len(rate_limits) > 4096:
-        for key in list(rate_limits):
-            if not rate_limits[key] or rate_limits[key][-1] < now - 60:
-                del rate_limits[key]
+    enforce_session_rate_limit(request)
 
     suffix = uuid4().hex[:12]
     room_name = f"inference-{suffix}"
@@ -402,7 +306,6 @@ async def create_session(
         if dispatch_target
         else []
     )
-    # Dispatch on room join: supports explicit Cloud Agent ID (`CA_...`), local worker, or automatic dispatch (`""`).
     room_config = api.RoomConfiguration(
         name=room_name,
         empty_timeout=60,
@@ -470,7 +373,6 @@ async def health():
     }
 
 
-# Build once with npm run build, then serve UI + API from this single HTTP process.
 if (ROOT / "dist").is_dir():
     app.mount("/", StaticFiles(directory=ROOT / "dist", html=True), name="frontend")
 else:

@@ -10,7 +10,7 @@ export function demoReply(text: string, config: Config): string {
       ? `Hey! Good to meet you. This is a local demo of your ${getModel("realtime", config.realtime_model).name} speech-to-speech pipeline. What would you like to explore?`
       : "Hey! Good to meet you. This is a local demo of your voice agent. What would you like to know about the inference pipeline?";
   }
-  if (/weather|time|news|today/.test(lower)) {
+  if (/\b(weather|time|news|today)\b/.test(lower)) {
     return "I'm a local demo, so I can't check live information yet. In Live mode, your LiveKit Cloud bot executes tools directly on LiveKit Cloud.";
   }
   if (/code|python|node|build|start|connect|setup/.test(lower)) {

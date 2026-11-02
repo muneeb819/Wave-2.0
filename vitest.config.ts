@@ -8,5 +8,14 @@ export default defineConfig({
     include: ["tests/**/*.ui.test.tsx"],
     globals: true,
     testTimeout: 15000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/main.tsx"],
+      thresholds: {
+        lines: 60,
+      },
+    },
   },
 });

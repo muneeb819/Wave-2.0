@@ -37,6 +37,9 @@ jobs:
       - name: Run Python API & Agent tests
         run: uv run pytest -q
 
+      - name: Run coverage
+        run: uv run pytest --cov=backend --cov-fail-under=60
+
   web-and-node-agent:
     name: Web Studio & Node.js Agent Starter
     runs-on: ubuntu-latest
@@ -73,6 +76,11 @@ jobs:
           pnpm run lint
           pnpm run test:dom
           pnpm run build
+
+      - name: Run coverage
+        env:
+          VITEST_PYTHON_BIN: python
+        run: pnpm vitest run --coverage
 
       - name: Install, typecheck & test Node.js Agent Starter
         working-directory: agent-node

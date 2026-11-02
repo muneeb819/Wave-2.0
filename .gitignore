@@ -7,6 +7,9 @@ certs/
 .venv/
 __pycache__/
 .pytest_cache/
+.coverage
+coverage/
+coverage.xml
 .env
 .env.local
 *.log

@@ -21,7 +21,7 @@
     "@livekit/agents": "^1.9.5",
     "@livekit/plugins-ai-coustics": "^0.3.5",
     "@livekit/rtc-node": "^1.2.1",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -43,7 +43,7 @@ export type LiveRoomBridgeContext = {
   stop: (reason?: string) => void;
 };
 
-async function resolveSessionCredentials(
+export async function resolveSessionCredentials(
   lk: typeof import("livekit-client"),
   ctx: LiveRoomBridgeContext,
   targetAgentName: string,
@@ -53,13 +53,12 @@ async function resolveSessionCredentials(
   roomLabel: string;
 }> {
   const { botSettings, config, accessToken, abortRef, log } = ctx;
-  if (botSettings.sandboxId.trim()) {
+  const sandboxId = (botSettings.sandboxId ?? "").trim();
+  if (sandboxId) {
     log(
-      `Fetching LiveKit Sandbox credentials (${botSettings.sandboxId.trim()})${targetAgentName ? ` for agent ${targetAgentName}` : " (automatic dispatch)"}…`,
+      `Fetching LiveKit Sandbox credentials (${sandboxId})${targetAgentName ? ` for agent ${targetAgentName}` : " (automatic dispatch)"}…`,
     );
-    const tokenSource = lk.TokenSource.developmentTokenServer(
-      botSettings.sandboxId.trim(),
-    );
+    const tokenSource = lk.TokenSource.developmentTokenServer(sandboxId);
     const details = await tokenSource.fetch(
       targetAgentName ? { agentName: targetAgentName } : {},
     );

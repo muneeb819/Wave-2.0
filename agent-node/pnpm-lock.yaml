@@ -12,8 +12,8 @@ importers:
         specifier: ^1.9.3
         version: 1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7)
       '@livekit/plugins-ai-coustics':
-        specifier: ^0.3.2
-        version: 0.3.4(@livekit/agents@1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7))(@livekit/rtc-node@0.13.35)
+        specifier: ^0.3.5
+        version: 0.3.5(@livekit/agents@1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7))(@livekit/rtc-node@0.13.35)
       '@livekit/rtc-node':
         specifier: ^0.13.35
         version: 0.13.35
@@ -421,33 +421,33 @@ packages:
   '@livekit/mutex@1.1.1':
     resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
 
-  '@livekit/plugins-ai-coustics-aarch64-apple-darwin@0.3.4':
-    resolution: {integrity: sha512-Ibsro1cjH6JohW2550FiWnd7C9yU0iV3xVzRX2sYAnFn1EQrINnfPzQASETsQ9iFPqCg2HQaMXBtLo2TR7MGhw==}
+  '@livekit/plugins-ai-coustics-aarch64-apple-darwin@0.3.5':
+    resolution: {integrity: sha512-PAJvUSMfy0s2EM9xzoGw07tG/DuM1NWs5lu7OMtetkaZOg6ilEYr0ZeaWWqDkj8oVTDSW1e833dTZatAGDT89A==}
     cpu: [arm64]
     os: [darwin]
 
-  '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu@0.3.4':
-    resolution: {integrity: sha512-bYoBGdKF7R+5ceadoYNgKvEg5fEc3KfITAiFwLRfYysRgGv8tzFnGvIxeD7QBzCtM4tlOlgJrgzdr/lDDUVsMg==}
+  '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu@0.3.5':
+    resolution: {integrity: sha512-eutbmi6SZriZIL9Gf7kQpfUFvrP6ExvP9it+o36TsIqQIcsuQKNCPrYVp+4K+9llNSZ3kB+XMoRkNmBEQmCrYA==}
     cpu: [arm64]
     os: [linux]
 
-  '@livekit/plugins-ai-coustics-x86_64-apple-darwin@0.3.4':
-    resolution: {integrity: sha512-UJPtorcbSFKAG2zQcabk7MwTsIhrKMiAIifq6J2+MG2AbvvL44FIKwMSO3kio5O5xXBjrWvPXAvD+VMIxkqQ1Q==}
+  '@livekit/plugins-ai-coustics-x86_64-apple-darwin@0.3.5':
+    resolution: {integrity: sha512-e4AF0GACNRNabczHfPAasoocXgRVnwPo4lNGMuPhNCx8L5HOCFJ7NlwHqqVRmOAwfGmup9W659B9AlxPIZkMvA==}
     cpu: [x64]
     os: [darwin]
 
-  '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc@0.3.4':
-    resolution: {integrity: sha512-qQzRTL8fYelsgt5gKDKoAJUAXXSf9iblDkTnRZg/qyx4g/woV5ZoXj/MZdt8X7KJYJ25/01XCgIJTjKADn39Pg==}
+  '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc@0.3.5':
+    resolution: {integrity: sha512-EORnwHEzhNvMCs4AzEv3r8fZoCI2iUtyK77RazovHczfJDcbq/i1POwiAwTuO8PfNlIb4mku6jZSKStrWOT5Ew==}
     cpu: [x64]
     os: [win32]
 
-  '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu@0.3.4':
-    resolution: {integrity: sha512-NRI8/nlh9lKloIuZIY8LcdTyTV4/cxaE6eV+l7q8Di0iQ6PlnUtHxTfA5dNwtkxhg4Np0My4VrbJgLoMK8JO0w==}
+  '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu@0.3.5':
+    resolution: {integrity: sha512-1XH0Q/QAfYFS4Kwq5Dqbu1TX+H6DCl4uU4iSI6dyhUmhK3WfFaqfEbd1ZnzesGc8aRisDD2X7cAIKZzmjskzig==}
     cpu: [x64]
     os: [linux]
 
-  '@livekit/plugins-ai-coustics@0.3.4':
-    resolution: {integrity: sha512-XaebKS4PPMH4FjzaPl5NpOEwRnApglf4WIojksgUY43OO8xgxRUvCwUOhRAySF8UPT8lE0qbnibuz0GfBp0Elw==}
+  '@livekit/plugins-ai-coustics@0.3.5':
+    resolution: {integrity: sha512-SEkH0pDhAQnZL8lC3JSJu+uJ6vpuY2W88D0BTHAoQSRcHB2MqEvdNDX5dWIpfCFpVrsCwe7UBXE/fK0iW2oA+g==}
     engines: {node: '>= 18'}
     peerDependencies:
       '@livekit/agents': ^1.0.43
@@ -511,6 +511,7 @@ packages:
     engines: {node: ^22.20 || ^24.12 || >=25}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@opentelemetry/api-logs@0.220.0':
     resolution: {integrity: sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w==}
@@ -683,66 +684,79 @@ packages:
     resolution: {integrity: sha512-ble2WR7kWfzZFJUd3ODMGCJn1XDszptfRC0QvWc0h9/EA6MxnrQ1mvbjPZifEdgHyfHhDrwWeKeJONDITcrHSg==}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.64.10':
     resolution: {integrity: sha512-DMCYegihxBMKvLpODdk4OsvIgxtHTi+Oddf1Pm3d6wMVNjcBiG2pqyXjMPy55HgG1gCdEFr9VfhB1CmvuKn1lw==}
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.64.10':
     resolution: {integrity: sha512-HQ6HuVH9TmhvPWIas7MA/KeAROgdwqH3REpUU6hZq47NW7m1b1QCrHgM+M3+N/B8DfMt88x1/z79ppRc9RflCQ==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.64.10':
     resolution: {integrity: sha512-avBhxba1DdctX0kxKkN3JWdTSg72QsxSn6FdfhZ9MkL3TTYDOXqxY1GqbC7VNttlgviK7tCe2No5btfRkFgeIg==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.64.10':
     resolution: {integrity: sha512-UtQMex7fiXq0W/GqcWRpy6XKqUbXgQeGKB+Bd5rJngmHzpI+3kjwpWFLAhKg02onFsIMSh+Zx0zp9JIMQ7/05A==}
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-loong64-musl@4.64.10':
     resolution: {integrity: sha512-0Aum2pUsCSuOopi6oka+nR1DTj/nfvc1xjL979lvh6kXUjNa30TCX7sKFjyMsrX7bK3bNVs0FsJwQcE2HCWX1Q==}
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-gnu@4.64.10':
     resolution: {integrity: sha512-4dgsouKal3qfMFORgtNigLPt7K3HXiO6jTr7+nFJv1GWu1OkZx0kvQIXbK4sjrIGnaLBk0s80eQCQ9hPIelLrw==}
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.64.10':
     resolution: {integrity: sha512-d7NE89try3jisYzBD7J9M5iwfgcrXYC4dwHEjQ3HIWBftvwch1U/cy3iZ26SthtUOyClKiu7iqYiFjQEwiOlqQ==}
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-gnu@4.64.10':
     resolution: {integrity: sha512-dqB5ChSBp91JWXxpCKAS5ZVAE38esKQvdfyqANm0lF5JPiQrXnYwgG3oVBQmuNRcQ1WHkA3j5qYLsrl2CtfhCA==}
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.64.10':
     resolution: {integrity: sha512-7GMf3vbQQslorWLmfsbi5fdt9RVnglk205XpOMFvW6UY5jE5oJc6JLieQJPHtsYlZ2EO0PtC06nY9Hz/IG8guw==}
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.64.10':
     resolution: {integrity: sha512-tuKbkB23DKc5LG+irPSUnZZztRHqC3CNmyxeWloueBteHB+i+1HkRCMzAE41lseLDlarybeLhqfibFitKOxKMg==}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.64.10':
     resolution: {integrity: sha512-ntHtQOMw7oIshHRF1swV3vyBw+beQt9PeZ04O3D32EeDZUMoHMJuZKp4/fDllH/+xogeK0GUCONVfjjKusqKLg==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.64.10':
     resolution: {integrity: sha512-Dlh8q8r145aYgh+N3gNIG1dz35Fz/FCxe5hs/43orDsffjP8S1P4Xz5I4FpSJsDS4LpQw1QmswZkQlUbkCldjQ==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-openbsd-x64@4.64.10':
     resolution: {integrity: sha512-VBJhHWz/55u45CWFv9OmfSRDgJDVENESgFxSAn13gIKJpTuFJbP4/7ymMZhDfeKFx1zGn1XBsLnNB7Ryy71qww==}
@@ -809,21 +823,25 @@ packages:
     resolution: {integrity: sha512-m4S96owMdh53G6w6hALi7nfsUhB+Y6bAcjVJnRdzVe5WJ+o2dMTbj9u/IxtcJaENtLLEMDPHhLAZmxQS9Licew==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@ubjs/node-linux-arm64-musl@0.31.0-5':
     resolution: {integrity: sha512-VVkXe8We9ka8FZqJfsbl4DEkbn4nt4htSCd2Vr39L9kOrBtNZ8SR0s+BiMQ8xBQnP6u+O95TrhOviROCDj2VSw==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@ubjs/node-linux-x64-gnu@0.31.0-5':
     resolution: {integrity: sha512-xFvl3iGWBVqghmz9lC4qij+ezLHV5V11O/6G+0rM7a/nAQdweCSCeZ65QsiVoqC/bYJ7fKIyKCXFMy5ldhSQvw==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@ubjs/node-linux-x64-musl@0.31.0-5':
     resolution: {integrity: sha512-R3HzFVI+v9G5CVOFOSxhF9SYX1o/6llA9mQbaANYMANuybE6LNJ8fgj51CTRrhobjWmgA24swq24DqbVsqypZg==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@ubjs/node-win32-arm64-msvc@0.31.0-5':
     resolution: {integrity: sha512-A7Z6lYqY0QQF4j3ce/3k1iIjgJIMWje3wTU9RfOTDSl0hcKKHDezvwvLiLBbVjagwJQOKWO5zwWLBAw6KTUDHQ==}
@@ -1791,22 +1809,22 @@ snapshots:
 
   '@livekit/mutex@1.1.1': {}
 
-  '@livekit/plugins-ai-coustics-aarch64-apple-darwin@0.3.4':
+  '@livekit/plugins-ai-coustics-aarch64-apple-darwin@0.3.5':
     optional: true
 
-  '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu@0.3.4':
+  '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu@0.3.5':
     optional: true
 
-  '@livekit/plugins-ai-coustics-x86_64-apple-darwin@0.3.4':
+  '@livekit/plugins-ai-coustics-x86_64-apple-darwin@0.3.5':
     optional: true
 
-  '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc@0.3.4':
+  '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc@0.3.5':
     optional: true
 
-  '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu@0.3.4':
+  '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu@0.3.5':
     optional: true
 
-  '@livekit/plugins-ai-coustics@0.3.4(@livekit/agents@1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7))(@livekit/rtc-node@0.13.35)':
+  '@livekit/plugins-ai-coustics@0.3.5(@livekit/agents@1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7))(@livekit/rtc-node@0.13.35)':
     dependencies:
       '@livekit/agents': 1.9.3(@livekit/rtc-node@0.13.35)(@types/node@22.20.5)(typescript@5.9.3)(zod@4.6.7)
       '@livekit/rtc-node': 0.13.35
@@ -1815,11 +1833,11 @@ snapshots:
       pino: 9.13.1
       pino-pretty: 13.2.0
     optionalDependencies:
-      '@livekit/plugins-ai-coustics-aarch64-apple-darwin': 0.3.4
-      '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu': 0.3.4
-      '@livekit/plugins-ai-coustics-x86_64-apple-darwin': 0.3.4
-      '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc': 0.3.4
-      '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu': 0.3.4
+      '@livekit/plugins-ai-coustics-aarch64-apple-darwin': 0.3.5
+      '@livekit/plugins-ai-coustics-aarch64-unknown-linux-gnu': 0.3.5
+      '@livekit/plugins-ai-coustics-x86_64-apple-darwin': 0.3.5
+      '@livekit/plugins-ai-coustics-x86_64-pc-windows-msvc': 0.3.5
+      '@livekit/plugins-ai-coustics-x86_64-unknown-linux-gnu': 0.3.5
 
   '@livekit/protocol@1.51.0':
     dependencies:

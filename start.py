@@ -43,6 +43,7 @@ from backend.launcher_net import (
     start_http_redirect,
     stop_http_redirects,
 )
+from backend.launcher_summary import format_publication_summary
 
 DEFAULT_DEV_UI_PORT = 5173
 DEFAULT_API_PORT = 8000
@@ -455,44 +456,19 @@ def print_publication_summary(
     prod: bool,
     requested_host: str = "",
 ) -> None:
-    urls = [f"  Local     : {build_url(scheme, 'localhost', port)}"]
-    if host in WILDCARD_HOSTS:
-        for address in local_ipv4_addresses():
-            urls.append(f"  Network   : {build_url(scheme, address, port)}")
-    elif host not in {"127.0.0.1", "localhost", "::1"}:
-        urls.append(f"  Bind host : {build_url(scheme, host, port)}")
-    if requested_host and requested_host != host and requested_host not in WILDCARD_HOSTS:
-        urls.append(
-            f"  Published : {build_url(scheme, requested_host, port)}  (after port forwarding)"
-        )
-
-    api_port = port if prod else args.api_port
-    api_line = f"  API       : {build_url(scheme, 'localhost', api_port)}/api/health"
-    status = "ready" if ready else "still starting (check the log above)"
     print(
-        f"\nWave 2.0 is running [{'prod' if prod else 'dev'}, {scheme.upper()}] - {status}\n"
-        + "\n".join(urls)
-        + f"\n{api_line}",
+        format_publication_summary(
+            args,
+            host,
+            port,
+            scheme,
+            ready,
+            prod=prod,
+            requested_host=requested_host,
+            token=studio_token(),
+        ),
         flush=True,
     )
-
-    if scheme == "https":
-        print(
-            "\nTLS note: the certificate is self-signed, so the first visit shows a warning.\n"
-            "          Choose Advanced -> Proceed to continue (required for microphone access).",
-            flush=True,
-        )
-    elif host not in WILDCARD_HOSTS and host not in {"127.0.0.1", "localhost", "::1"}:
-        print(
-            "\nWarning: plain HTTP on a non-localhost address is NOT a secure context, so\n"
-            "         Chrome/Edge/Safari will block the microphone and Live sessions cannot\n"
-            "         connect. Re-run with --https to publish with TLS.",
-            flush=True,
-        )
-
-    exposure = host if host not in WILDCARD_HOSTS else (requested_host or "0.0.0.0")
-    for message in publishing_risks(exposure, studio_token()):
-        print(f"\nWarning: {message}", flush=True)
 
 
 if __name__ == "__main__":

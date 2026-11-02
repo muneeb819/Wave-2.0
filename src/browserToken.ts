@@ -1,3 +1,4 @@
+import { BrowserLiveKitCredsSchema } from "./schemas";
 import type { Config } from "./types";
 
 export const PUBLIC_CHROME_STUDIO_URL =
@@ -28,29 +29,22 @@ export function readSessionBrowserCreds(): BrowserLiveKitCreds | null {
   try {
     const raw = sessionStorage.getItem(SESSION_CREDS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (
-      parsed &&
-      typeof parsed.livekitUrl === "string" &&
-      typeof parsed.apiKey === "string" &&
-      typeof parsed.apiSecret === "string" &&
-      parsed.livekitUrl &&
-      parsed.apiKey &&
-      parsed.apiSecret
-    ) {
-      return parsed as BrowserLiveKitCreds;
-    }
-    return null;
+    const parsed = BrowserLiveKitCredsSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 }
 
-export function saveSessionBrowserCreds(creds: BrowserLiveKitCreds): void {
+export function saveSessionBrowserCreds(creds: BrowserLiveKitCreds): boolean {
+  const validated = BrowserLiveKitCredsSchema.safeParse(creds);
+  if (!validated.success) return false;
   try {
-    sessionStorage.setItem(SESSION_CREDS_KEY, JSON.stringify(creds));
+    sessionStorage.setItem(SESSION_CREDS_KEY, JSON.stringify(validated.data));
+    return true;
   } catch {
     /* sessionStorage unavailable */
+    return false;
   }
 }
 
@@ -87,16 +81,15 @@ export async function mintBrowserLiveKitSession(
   room_name: string;
   agent_name: string;
 }> {
+  const checked = BrowserLiveKitCredsSchema.parse(creds);
   const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   const roomName = `inference-${suffix}`;
   const identity = `user-${suffix}`;
   const now = Math.floor(Date.now() / 1000);
 
   const header = { alg: "HS256", typ: "JWT" };
-  // Mirror the claim set produced by `livekit.api.AccessToken`: `iat`/`jti` are present
-  // so browser-minted tokens are indistinguishable from server-minted ones.
   const payload = {
-    iss: creds.apiKey.trim(),
+    iss: checked.apiKey,
     sub: identity,
     name: "You",
     jti: crypto.randomUUID(),
@@ -129,7 +122,7 @@ export async function mintBrowserLiveKitSession(
 
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    utf8Bytes(creds.apiSecret.trim()),
+    utf8Bytes(checked.apiSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -142,7 +135,7 @@ export async function mintBrowserLiveKitSession(
   const jwt = `${signingInput}.${toBase64Url(new Uint8Array(signature))}`;
 
   return {
-    server_url: creds.livekitUrl.trim(),
+    server_url: checked.livekitUrl,
     participant_token: jwt,
     room_name: roomName,
     agent_name: agentName,

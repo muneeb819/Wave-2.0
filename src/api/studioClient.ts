@@ -1,3 +1,4 @@
+import { CloudStatusSchema, SessionMintResponseSchema } from "../schemas";
 import {
   DEFAULT_CLOUD_AGENT_ID,
   DEFAULT_CLOUD_AGENT_URL,
@@ -33,8 +34,11 @@ export async function fetchStudioStatus(): Promise<StatusFetchResult> {
       }
       return { kind: "offline" };
     }
-    const payload = (await response.json()) as CloudStatus;
-    return { kind: "ok", status: payload };
+    const parsed = CloudStatusSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      return { kind: "offline" };
+    }
+    return { kind: "ok", status: parsed.data as CloudStatus };
   } catch {
     return { kind: "offline" };
   }
@@ -92,8 +96,14 @@ export async function postStudioCredentials(params: {
       }),
     });
     if (response.ok) {
-      const payload = (await response.json()) as CloudStatus;
-      return { kind: "saved", status: payload };
+      const parsed = CloudStatusSchema.safeParse(await response.json());
+      if (!parsed.success) {
+        return {
+          kind: "error",
+          message: "Unexpected status payload from server.",
+        };
+      }
+      return { kind: "saved", status: parsed.data as CloudStatus };
     }
     if (response.status === 404 || response.status === 405) {
       return { kind: "static_fallback" };
@@ -142,8 +152,14 @@ export async function postStudioSession(params: {
     signal: params.signal,
   });
   if (response.ok) {
-    const data = (await response.json()) as SessionMintResponse;
-    return { kind: "ok", data };
+    const parsed = SessionMintResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      return {
+        kind: "error",
+        message: "Server returned an invalid session payload.",
+      };
+    }
+    return { kind: "ok", data: parsed.data };
   }
   if (response.status === 404 || response.status === 405) {
     return { kind: "static_fallback" };

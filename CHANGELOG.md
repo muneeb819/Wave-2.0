@@ -4,6 +4,18 @@ All notable changes to **Wave 2.0** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-11-02
+
+### Added
+- Live loopback HTTP integration tests (`tests/test_secrets_vault.py`) exercising HashiCorp Vault KV v2/v1 (`X-Vault-Token`, `X-Vault-Namespace`, secret rotation) and Doppler HTTP Basic Auth (`DOPPLER_API_URL`) over real sockets.
+- Dedicated unit and UI test suites across `useAgentSession`, `liveRoomBridge`, `useMicTester`, `useCloudConnection`, `studioClient`, `browserToken`, `InferencePage`, `SessionsPage`, `SettingsPage`, `ConnectBotModal`, `CodeExportModal`, `RealtimePipelineModal`, `PlaygroundViewport`, `StudioDialogs`, `security_guards`, and `launcher_net` (39 total spec files; >83% frontend line coverage and >90% backend coverage).
+- Standalone `pyright` backend static typecheck, `tsc --noEmit` frontend typecheck, `eslint`, and coverage steps in `.github/workflows/ci.yml` gating pull requests to `main`.
+- `renovate.json` alongside weekly `.github/dependabot.yml` automation and `.gitattributes` generated-asset declarations.
+
+### Changed
+- Split `tests/test_api.py` into `tests/conftest.py`, `tests/test_api_tokens.py`, `tests/test_api_sessions.py`, and `tests/test_worker_pipeline.py`; extracted `backend/security_guards.py`, `backend/launcher_summary.py`, and `src/sections/PlaygroundViewport.tsx`; configured Vite vendor chunking so zero code files exceed 500 SLOC (450-line ESLint cap).
+- Replaced exact `==` version pins in `pyproject.toml`, `requirements.txt`, and `package.json` with compatible SemVer ranges (`livekit-agents>=1.8.10,<2`, `livekit-api>=1.2.2,<2`, `livekit-client@^2.23.0`).
+
 ## [2.0.0] - 2026-11-02
 
 ### Added
@@ -18,6 +30,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 - Upgraded `vitest`, `@vitest/coverage-v8`, and `vite` across Web Studio and `agent-node` to remediate upstream dependency advisories.
 - Expanded `.env.example` to document all runtime, Vite proxy, TLS, deployment, E2B, and secret-provider environment variables.
+
+## [1.2.0] - 2026-04-20
+
+### Added
+- E2B cloud sandbox preview proxy (`scripts/e2b-traffic-proxy.mjs`) and Chrome microphone pre-call level meter (`useMicTester`).
 
 ## [1.1.0] - 2026-04-12
 

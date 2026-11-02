@@ -1,38 +1,36 @@
-name: CI
+name: Wave 2.0 CI
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  python:
-    name: Python Agent, API & Ruff
+  python-backend-and-agent:
+    name: Python Backend, Agent & Preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up Python 3.13
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --python 3.13
 
-      - name: Download plugin model files
-        run: uv run python -m livekit.agents download-files
-
-      - name: Run Ruff linter & formatter check
+      - name: Lint & format check (ruff)
         run: |
           uv run ruff check .
           uv run ruff format --check .
+
+      - name: Audit Python dependencies
+        run: uv run pip-audit --skip-editable
 
       - name: Run Python API & Agent tests
         run: uv run pytest -q
@@ -41,31 +39,30 @@ jobs:
         run: uv run pytest --cov=backend --cov-fail-under=60
 
   web-and-node-agent:
-    name: Web Studio & Node.js Agent Starter
+    name: Web Studio, Token Interop & Node.js Agent
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
+      - name: Install uv + livekit-api (for WebCrypto <-> Python TokenVerifier test)
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python 3.13 & sync backend deps
+        run: |
+          uv python install 3.13
+          uv sync --dev --python 3.13
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: "10"
+          version: 10.15.0
 
-      - name: Set up Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-
-      # The Studio tests cross-check browser-minted JWTs with the official
-      # `livekit.api.TokenVerifier`. Only the lightweight API client is needed here
-      # (not the full `livekit-agents` stack), so this stays fast.
-      - name: Set up Python for token verification
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install LiveKit API verifier
-        run: python -m pip install --disable-pip-version-check "livekit-api==1.2.2"
+          node-version: 22
+          cache: pnpm
 
       - name: Install & test Web Studio
         env:
@@ -73,6 +70,7 @@ jobs:
           VITEST_PYTHON_BIN: python
         run: |
           pnpm install
+          pnpm audit --audit-level=high
           pnpm run lint
           pnpm run test:dom
           pnpm run build
@@ -82,9 +80,43 @@ jobs:
           VITEST_PYTHON_BIN: python
         run: pnpm vitest run --coverage
 
-      - name: Install, typecheck & test Node.js Agent Starter
+      - name: Install, test & typecheck Node.js Agent
         working-directory: agent-node
         run: |
           pnpm install
-          pnpm run typecheck
+          pnpm audit --audit-level=high
           pnpm test
+          pnpm build
+
+  security-scan:
+    name: Dedicated Security & Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python 3.13 & audit dependencies
+        run: |
+          uv python install 3.13
+          uv sync --dev --python 3.13
+          uv run pip-audit --skip-editable
+          uv run pytest tests/test_security.py -q --no-cov
+
+      - name: Setup pnpm & Node.js 22
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Audit Web & Node.js Agent lockfiles
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm audit --audit-level=high
+          pnpm --dir agent-node install --frozen-lockfile
+          pnpm --dir agent-node audit --audit-level=high

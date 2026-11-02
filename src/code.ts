@@ -10,6 +10,16 @@ function pythonTurnDetectionExpr(config: Config): string {
   return "inference.TurnDetector()";
 }
 
+function nodeTurnDetectionExpr(config: Config): string {
+  if (config.stt.includes("flux") || config.turn_detection === "stt") {
+    return '"stt"';
+  }
+  if (config.turn_detection === "vad") {
+    return '"vad"';
+  }
+  return "new inference.TurnDetector()";
+}
+
 function pythonRealtimeExpr(config: Config): string {
   const cls =
     config.realtime_model === "openai/gpt-live-1"
@@ -52,7 +62,7 @@ const session = new voice.AgentSession({
     voice: ${JSON.stringify(config.voice)},
   }),
   turnHandling: {
-    turnDetection: new inference.TurnDetector(),
+    turnDetection: ${nodeTurnDetectionExpr(config)},
     preemptiveGeneration: { enabled: ${String(config.preemptive_generation)} },
   },
   expressive: ${String(config.expressive)},
@@ -357,6 +367,16 @@ export function nodeAgent(config: Config): string {
       })`
       : `new inference.LLM({ model: ${JSON.stringify(config.llm)} })`;
 
+  const turnDetectionExpr = nodeTurnDetectionExpr(config);
+  const keytermsBlock =
+    config.keyterms.length > 0
+      ? `
+      keytermsOptions: {
+        keyterms: ${JSON.stringify(config.keyterms)},
+        keytermDetection: { enabled: true },
+      },`
+      : "";
+
   const sessionInit =
     config.pipeline === "realtime"
       ? "const session = new voice.AgentSession({});"
@@ -364,17 +384,13 @@ export function nodeAgent(config: Config): string {
       stt: new inference.STT({
         model: ${JSON.stringify(config.stt)},
         language: ${JSON.stringify(config.language)},
-      }),
-      keytermsOptions: {
-        keyterms: ${JSON.stringify(config.keyterms)},
-        keytermDetection: { enabled: true },
-      },
+      }),${keytermsBlock}
       tts: new inference.TTS({
         model: ${JSON.stringify(config.tts)},
         voice: ${JSON.stringify(config.voice)},
       }),
       turnHandling: {
-        turnDetection: new inference.TurnDetector(),
+        turnDetection: ${turnDetectionExpr},
         preemptiveGeneration: { enabled: ${String(config.preemptive_generation)} },
       },
       expressive: ${String(config.expressive)},

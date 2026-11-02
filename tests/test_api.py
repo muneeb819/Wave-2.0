@@ -25,6 +25,7 @@ from backend.agent import (
 )
 from backend.config import SessionConfig
 from backend.main import app, rate_limits
+from backend.secrets import clear_secret_cache
 from gen_cert import generate_self_signed_cert
 
 KEY = "test-livekit-key"
@@ -38,8 +39,14 @@ def isolated_environment(monkeypatch):
         *settings.CREDENTIAL_NAMES,
         "LIVEKIT_AGENT_NAME",
         "STUDIO_ACCESS_TOKEN",
+        "SECRET_PROVIDER",
+        "VAULT_ADDR",
+        "VAULT_TOKEN",
+        "DOPPLER_TOKEN",
     ):
         monkeypatch.setenv(name, "")
+        monkeypatch.setenv(f"{name}_FILE", "")
+    clear_secret_cache()
     rate_limits.clear()
 
 

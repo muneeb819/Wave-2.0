@@ -28,6 +28,7 @@ from .config import (
     DEFAULT_CLOUD_URL_HINT,
     ROOT,
     SessionConfig,
+    active_secret_provider,
     agent_name,
     environment,
     parse_cloud_agent_url,
@@ -229,6 +230,7 @@ async def status():
         "missing": missing,
         "invalid_url": not valid_url,
         "protected": bool(env["STUDIO_ACCESS_TOKEN"]),
+        "secret_provider": active_secret_provider(),
         "agent_name": agent_name(),
         "cloud_agent_url": configured_agent_url,
         "cloud_project_id": parsed_project_id or DEFAULT_CLOUD_PROJECT_ID,
@@ -447,6 +449,7 @@ async def health():
         "uptime_seconds": int(time.time() - STARTED_AT),
         "configured": all(env[name] for name in CREDENTIAL_NAMES),
         "protected": bool(env["STUDIO_ACCESS_TOKEN"]),
+        "secret_provider": active_secret_provider(),
         "error_tracking": error_tracking_enabled(),
         "metrics": counters.snapshot(),
     }

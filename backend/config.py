@@ -11,6 +11,8 @@ from typing import Literal
 from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .secrets import active_secret_provider, resolve_configuration
+
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = json.loads((ROOT / "shared" / "models.json").read_text(encoding="utf-8"))
 DEFAULTS = CATALOG["defaults"]
@@ -36,7 +38,7 @@ def parse_cloud_agent_url(raw: str) -> tuple[str | None, str | None]:
 
 
 def environment() -> dict[str, str]:
-    """Read .env.local without exposing credentials to the frontend or mutating os.environ."""
+    """Resolve configuration via env, *_FILE mounts, Vault/Doppler, or .env.local without exposing secrets."""
     file_values = dotenv_values(ROOT / ".env.local")
     names = (
         *CREDENTIAL_NAMES,
@@ -46,7 +48,25 @@ def environment() -> dict[str, str]:
         "LIVEKIT_SANDBOX_ID",
         "STUDIO_ACCESS_TOKEN",
     )
-    return {name: (os.environ.get(name) or file_values.get(name) or "").strip() for name in names}
+    return resolve_configuration(names, file_values)
+
+
+__all__ = [
+    "CATALOG",
+    "CREDENTIAL_NAMES",
+    "DEFAULT_CLOUD_AGENT_ID",
+    "DEFAULT_CLOUD_AGENT_URL",
+    "DEFAULT_CLOUD_PROJECT_ID",
+    "DEFAULT_CLOUD_URL_HINT",
+    "DEFAULTS",
+    "ROOT",
+    "SessionConfig",
+    "active_secret_provider",
+    "agent_name",
+    "environment",
+    "parse_cloud_agent_url",
+    "write_env_local",
+]
 
 
 def agent_name(default: str = "inference-studio") -> str:

@@ -373,5 +373,22 @@ def format_report(checks: list[Check], *, title: str = "Wave 2.0 deployment pre-
     return "\n".join(lines)
 
 
+def format_json_report(checks: list[Check]) -> str:
+    """Serialize pre-flight results as machine-readable JSON for CI/CD automation."""
+    import json
+
+    failures = sum(1 for check in checks if check.failed)
+    warnings = sum(1 for check in checks if check.status == WARN)
+    payload = {
+        "ok": failures == 0,
+        "failures": failures,
+        "warnings": warnings,
+        "checks": [
+            {"status": check.status, "name": check.name, "detail": check.detail} for check in checks
+        ],
+    }
+    return json.dumps(payload, indent=2)
+
+
 def exit_code(checks: list[Check]) -> int:
     return 1 if any(check.failed for check in checks) else 0

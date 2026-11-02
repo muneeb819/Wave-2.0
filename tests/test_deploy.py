@@ -303,3 +303,36 @@ def test_deployment_guide_covers_every_supported_path():
         "CGNAT",
     ):
         assert topic in guide, topic
+
+
+def test_preflight_json_report_and_cli_flag(tmp_path: Path, launcher):
+    import json
+
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "LIVEKIT_URL=wss://prod-test.livekit.cloud\n"
+        "LIVEKIT_API_KEY=APIvalidKey123\n"
+        "LIVEKIT_API_SECRET=valid-secret-at-least-thirty-two-chars-long\n"
+        "STUDIO_ACCESS_TOKEN=valid-token-at-least-thirty-two-chars-long\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+
+    checks = preflight.run_preflight(
+        host="127.0.0.1",
+        port=free_port(),
+        https=True,
+        mode="prod",
+        root=tmp_path,
+        env_path=env,
+    )
+    raw = preflight.format_json_report(checks)
+    parsed = json.loads(raw)
+    assert parsed["ok"] is True
+    assert parsed["failures"] == 0
+    assert isinstance(parsed["checks"], list) and len(parsed["checks"]) >= 6
+
+    parsed_args = launcher.parse_args(["--preflight", "--json", "--host", "127.0.0.1"])
+    assert parsed_args.preflight is True
+    assert parsed_args.json is True

@@ -62,7 +62,9 @@ def _valid_vault_addr(addr: str) -> bool:
 def _fetch_vault_secrets() -> dict[str, str]:
     addr = os.environ.get("VAULT_ADDR", "").strip().rstrip("/")
     token = os.environ.get("VAULT_TOKEN", "").strip()
-    secret_path = os.environ.get("VAULT_SECRET_PATH", "secret/data/wave-studio").strip().lstrip("/")
+    secret_path = (
+        os.environ.get("VAULT_SECRET_PATH", "").strip() or "secret/data/wave-studio"
+    ).lstrip("/")
     namespace = os.environ.get("VAULT_NAMESPACE", "").strip()
     if not addr or not token or not _valid_vault_addr(addr):
         logger.warning("vault_configuration_invalid")
@@ -87,11 +89,15 @@ def _fetch_vault_secrets() -> dict[str, str]:
 
 def _fetch_doppler_secrets() -> dict[str, str]:
     token = os.environ.get("DOPPLER_TOKEN", "").strip()
-    if not token:
+    api_url = (
+        os.environ.get("DOPPLER_API_URL", "").strip()
+        or "https://api.doppler.com/v3/configs/config/secrets/download"
+    )
+    if not token or not _valid_vault_addr(api_url):
         return {}
     try:
         response = httpx.get(
-            "https://api.doppler.com/v3/configs/config/secrets/download",
+            api_url,
             params={"format": "json"},
             auth=(token, ""),
             timeout=5.0,

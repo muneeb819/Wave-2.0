@@ -24,7 +24,10 @@ def isolated_environment(monkeypatch):
         "SECRET_PROVIDER",
         "VAULT_ADDR",
         "VAULT_TOKEN",
+        "VAULT_NAMESPACE",
+        "VAULT_SECRET_PATH",
         "DOPPLER_TOKEN",
+        "DOPPLER_API_URL",
     ):
         monkeypatch.setenv(name, "")
         monkeypatch.setenv(f"{name}_FILE", "")

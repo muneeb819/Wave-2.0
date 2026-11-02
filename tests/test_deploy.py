@@ -349,3 +349,19 @@ def test_pyproject_uses_compatible_ranges_and_renovate_config_is_valid():
 
     renovate = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     assert "config:recommended" in renovate["extends"]
+
+
+def test_ci_workflow_gates_pr_with_explicit_lint_typecheck_and_test_steps():
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    triggers = workflow.get("on") or workflow.get(True)
+    assert isinstance(triggers, dict)
+    assert isinstance(triggers.get("pull_request"), dict)
+    frontend_steps = [
+        step.get("run", "") for step in workflow["jobs"]["frontend"]["steps"] if "run" in step
+    ]
+    assert any("eslint" in cmd for cmd in frontend_steps)
+    assert any("tsc --noEmit" in cmd for cmd in frontend_steps)
+    assert any("pnpm test" in cmd for cmd in frontend_steps)
+    assert any("vitest run --coverage" in cmd for cmd in frontend_steps)

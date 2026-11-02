@@ -45,7 +45,7 @@ packages = ["backend"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=60"
+addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=80"
 
 [tool.ruff]
 line-length = 100

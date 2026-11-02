@@ -1,53 +1,25 @@
 name: Wave 2.0 CI
 
-on:
+"on":
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  python-backend-and-agent:
-    name: Python Backend, Agent & Preflight
+  frontend:
+    name: Frontend Lint, Typecheck, Tests & Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Install uv + Python 3.13 (for WebCrypto <-> LiveKit TokenVerifier interop)
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python 3.13
-        run: uv python install 3.13
-
-      - name: Install dependencies
-        run: uv sync --dev --python 3.13
-
-      - name: Lint & format check (ruff)
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-
-      - name: Audit Python dependencies
-        run: uv run pip-audit --skip-editable
-
-      - name: Run Python API & Agent tests
-        run: uv run pytest -q
-
-      - name: Run coverage
-        run: uv run pytest --cov=backend --cov-fail-under=60
-
-  web-and-node-agent:
-    name: Web Studio, Token Interop & Node.js Agent
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv + livekit-api (for WebCrypto <-> Python TokenVerifier test)
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install Python 3.13 & sync backend deps
+      - name: Sync Python interop dependencies
         run: |
           uv python install 3.13
           uv sync --dev --python 3.13
@@ -64,29 +36,60 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install & test Web Studio
-        env:
-          # Lets tests/pythonRunner.ts use the interpreter that has `livekit` installed.
-          VITEST_PYTHON_BIN: python
-        run: |
-          pnpm install
-          pnpm audit --audit-level=high
-          pnpm run lint
-          pnpm run test:dom
-          pnpm run build
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Run coverage
+      - name: Lint frontend with ESLint
+        run: pnpm exec eslint --max-warnings 0 src tests
+
+      - name: Typecheck frontend with TypeScript
+        run: pnpm exec tsc --noEmit
+
+      - name: Run frontend unit tests
         env:
           VITEST_PYTHON_BIN: python
-        run: pnpm vitest run --coverage
+        run: pnpm test
 
-      - name: Install, test & typecheck Node.js Agent
+      - name: Run frontend coverage check
+        env:
+          VITEST_PYTHON_BIN: python
+        run: pnpm exec vitest run --coverage
+
+      - name: Build production frontend bundle
+        run: pnpm run build
+
+      - name: Install, typecheck & test Node.js Agent
         working-directory: agent-node
         run: |
-          pnpm install
-          pnpm audit --audit-level=high
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
           pnpm test
-          pnpm build
+
+  backend:
+    name: Python Backend Lint, Typecheck & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.13 & install dependencies
+        run: |
+          uv python install 3.13
+          uv sync --dev --python 3.13
+
+      - name: Lint backend with Ruff
+        run: uv run ruff check .
+
+      - name: Check Python formatting with Ruff
+        run: uv run ruff format --check .
+
+      - name: Typecheck backend with Pyright
+        run: uv run pyright backend
+
+      - name: Run backend tests and coverage
+        run: uv run pytest --cov=backend --cov-fail-under=80
 
   security-scan:
     name: Dedicated Security & Dependency Audit
@@ -97,19 +100,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install Python 3.13 & audit dependencies
+      - name: Audit Python dependencies & run security suite
         run: |
           uv python install 3.13
           uv sync --dev --python 3.13
           uv run pip-audit --skip-editable
           uv run pytest tests/test_security.py -q --no-cov
 
-      - name: Setup pnpm & Node.js 22
+      - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 10.15.0
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm

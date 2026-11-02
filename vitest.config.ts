@@ -5,16 +5,16 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    include: ["tests/**/*.ui.test.tsx"],
+    include: ["tests/**/*.{test,ui.test}.{ts,tsx}"],
     globals: true,
     testTimeout: 15000,
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/main.tsx"],
+      exclude: ["src/main.tsx", "src/components/index.ts"],
       thresholds: {
-        lines: 60,
+        lines: 70,
       },
     },
   },

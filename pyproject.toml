@@ -19,7 +19,7 @@ dependencies = [
     "python-dotenv>=1.1,<2",
     "httpx>=0.28,<1",
     "cryptography>=42",
-    "structlog>=24.4,<26",
+    "structlog>=24.4,<27",
     "sentry-sdk[fastapi]>=2.20,<3",
 ]
 

@@ -1,4 +1,4 @@
-import { getModel } from "../types";
+import { formatTime, getModel } from "../types";
 import type { Config, HistoryEntry, Metrics } from "../types";
 
 export const HISTORY_STORAGE_KEY = "inference-studio:history";
@@ -64,4 +64,27 @@ export function persistHistory(history: HistoryEntry[]): void {
   } catch {
     /* Browser storage may be disabled/full. */
   }
+}
+
+export function formatTranscriptMarkdown(entry: HistoryEntry): string {
+  const stack =
+    entry.config.pipeline === "realtime"
+      ? entry.config.realtime_model
+      : `${entry.config.stt} -> ${entry.config.llm} -> ${entry.config.tts}`;
+  const header = [
+    `# Voice Session ${entry.id.slice(0, 8)}`,
+    `- **Mode**: ${entry.mode}`,
+    `- **Duration**: ${formatTime(entry.duration)}`,
+    `- **Pipeline**: \`${stack}\``,
+    "",
+    "## Transcript",
+  ];
+  const turns = entry.messages.length
+    ? entry.messages.map((msg) => {
+        const speaker = msg.role === "assistant" ? "Agent" : "User";
+        const suffix = msg.interrupted ? " _(interrupted)_" : "";
+        return `- **${speaker}**${suffix}: ${msg.text}`;
+      })
+    : ["_No messages were exchanged in this session._"];
+  return [...header, ...turns, ""].join("\n");
 }

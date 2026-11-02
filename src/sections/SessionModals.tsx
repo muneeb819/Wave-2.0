@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Cloud, Download, Play, Settings2, Trash2 } from "lucide-react";
-import { ChatAvatar, EmptyState, Modal, Pill } from "../components";
+import { ChatAvatar, CopyButton, EmptyState, Modal, Pill } from "../components";
+import { formatTranscriptMarkdown } from "../session/demoSimulator";
 import { downloadJSON, formatTime } from "../types";
 import type { HistoryEntry } from "../types";
 
@@ -98,6 +100,7 @@ export function TranscriptModal({
   onDelete: () => void;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
   return (
     <Modal
       title={`Voice session · ${entry.id.slice(0, 8)}`}
@@ -145,6 +148,15 @@ export function TranscriptModal({
           <Trash2 />
           Delete session
         </button>
+        <CopyButton
+          label={copied ? "Copied Markdown" : "Copy Markdown"}
+          copied={copied}
+          onClick={() => {
+            void navigator.clipboard
+              ?.writeText(formatTranscriptMarkdown(entry))
+              .then(() => setCopied(true));
+          }}
+        />
         <button
           className="button primary"
           onClick={() =>

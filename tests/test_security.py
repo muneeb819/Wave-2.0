@@ -184,3 +184,55 @@ def test_minted_jwt_enforces_strict_least_privilege_grants(monkeypatch):
         assert not video.get("roomList")
         assert not video.get("roomRecord")
         assert decoded["exp"] - decoded["nbf"] == 600
+
+
+def test_security_docs_and_env_example_stay_complete():
+    repo_root = Path(__file__).resolve().parent.parent
+    security_md = (repo_root / "SECURITY.md").read_text(encoding="utf-8")
+    readme_md = (repo_root / "README.md").read_text(encoding="utf-8")
+    contributing_md = (repo_root / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    changelog_md = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
+    env_example = (repo_root / ".env.example").read_text(encoding="utf-8")
+
+    assert "## Architecture Trust Boundaries" in security_md
+    assert "STUDIO_ACCESS_TOKEN" in security_md
+    assert "VAULT_ADDR" in security_md
+    assert "## Security" in readme_md and "(SECURITY.md)" in readme_md
+    assert len(contributing_md) > 500
+    assert "## [2.0.0]" in changelog_md
+
+    documented_keys = {
+        line.split("=", 1)[0].strip()
+        for line in env_example.splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+    required_keys = {
+        "LIVEKIT_URL",
+        "LIVEKIT_API_KEY",
+        "LIVEKIT_API_SECRET",
+        "LIVEKIT_AGENT_NAME",
+        "LIVEKIT_AGENT_URL",
+        "LIVEKIT_DISPATCH_MODE",
+        "LIVEKIT_SANDBOX_ID",
+        "STUDIO_ACCESS_TOKEN",
+        "STUDIO_ALLOWED_ORIGINS",
+        "STUDIO_TRUST_PROXY",
+        "STUDIO_ENABLE_HSTS",
+        "SECRET_PROVIDER",
+        "LIVEKIT_API_SECRET_FILE",
+        "VAULT_ADDR",
+        "VAULT_TOKEN",
+        "DOPPLER_TOKEN",
+        "LOG_LEVEL",
+        "SENTRY_DSN",
+        "WAVE_MODE",
+        "WAVE_HOST",
+        "WAVE_API_PORT",
+        "VITE_HOST",
+        "VITE_PORT",
+        "VITE_API_TARGET",
+        "VITE_HTTPS_CERT",
+        "VITE_HTTPS_KEY",
+    }
+    assert required_keys.issubset(documented_keys)
+    assert "your-livekit-api-secret" in env_example

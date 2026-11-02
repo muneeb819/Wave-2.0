@@ -172,6 +172,14 @@ If you are connecting to a self-hosted open-source LiveKit Server (`ws://localho
 
 ---
 
+## Security
+
+Wave 2.0 enforces strict trust boundaries between the browser Studio UI, the FastAPI token service, and LiveKit Cloud/self-hosted agent workers — including constant-time Bearer authentication (`STUDIO_ACCESS_TOKEN`), loopback write protection, CSP/HSTS headers, 10-minute room-scoped JWTs, and pluggable secret resolution (`*_FILE` secret mounts, HashiCorp Vault, and Doppler).
+
+See **[SECURITY.md](SECURITY.md)** for the full architecture threat model, secrets policy, and vulnerability disclosure process. For contributor workflow and release history, see **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
+
+---
+
 ## Testing & Verification Commands
 
 ```bash

@@ -1,4 +1,4 @@
-livekit-agents[silero]==1.8.8
+livekit-agents[silero]==1.8.10
 livekit-plugins-ai-coustics~=0.3
 livekit-api==1.2.2
 fastapi>=0.115,<1

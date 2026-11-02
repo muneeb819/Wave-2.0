@@ -236,3 +236,16 @@ def test_security_docs_and_env_example_stay_complete():
     }
     assert required_keys.issubset(documented_keys)
     assert "your-livekit-api-secret" in env_example
+
+    # Dynamic scan: ensure every LIVEKIT_* env var in src/, backend/, and agent-node/src/ is documented.
+    import re as _re
+
+    referenced_livekit: set[str] = set()
+    for folder in ("src", "backend", "agent-node/src"):
+        for file_path in (repo_root / folder).rglob("*"):
+            if file_path.is_file() and file_path.suffix in {".py", ".ts", ".tsx"}:
+                text = file_path.read_text(encoding="utf-8")
+                referenced_livekit.update(_re.findall(r"\bLIVEKIT_[A-Z0-9_]+\b", text))
+    assert referenced_livekit.issubset(documented_keys), (
+        f"Undocumented LIVEKIT_* vars: {sorted(referenced_livekit - documented_keys)}"
+    )

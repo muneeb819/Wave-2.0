@@ -180,6 +180,24 @@ See **[SECURITY.md](SECURITY.md)** for the full architecture threat model, secre
 
 ---
 
+## Architecture & API Reference
+
+Wave 2.0 is organized into three isolated runtime layers:
+- **Frontend Studio (`src/`)**: Modular React 19 + TypeScript + Zod workbench (`src/components/`, `src/pages/`, `src/sections/`, `src/session/`, `src/api/studioClient.ts`) wrapped in `ErrorBoundary`.
+- **FastAPI Control & Token Service (`backend/`)**: `main.py` (endpoints & security headers), `config.py` (allow-listed catalog & Pydantic schemas), `secrets.py` (`*_FILE`, HashiCorp Vault KV v2, Doppler), and `observability.py` (`structlog` JSON logging + optional Sentry telemetry).
+- **Voice Agent Starters (`backend/agent.py`, `agent-node/src/`)**: LiveKit Agents workers supporting both `stt-llm-tts` and `realtime` pipelines.
+
+| Endpoint | Method | Auth | Purpose |
+| -------- | ------ | ---- | ------- |
+| `/api/health` | `GET` | Public | Liveness probe, uptime, active secret provider, and request/error counters |
+| `/api/status` | `GET` | Public | Safe configuration readiness and Cloud bot dispatch metadata (never exposes keys) |
+| `/api/models` | `GET` | Public | Allow-listed STT, LLM, TTS, and Realtime models (`?stage=&provider=`) |
+| `/api/sessions` | `POST` | Bearer + Origin | Mint a 10-minute room-scoped participant JWT and dispatch metadata |
+| `/api/credentials` | `POST` | Loopback / Bearer | Persist server-side LiveKit credentials to `0600` `.env.local` |
+| `/api/bot-settings` | `POST` | Loopback / Bearer | Update default Cloud agent URL, dispatch mode, or Sandbox ID |
+
+---
+
 ## Testing & Verification Commands
 
 ```bash

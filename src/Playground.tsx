@@ -5,12 +5,8 @@ import {
   ArrowDownToLine,
   ArrowRight,
   AudioLines,
-  Braces,
-  Check,
-  ChevronRight,
   CircleHelp,
   Cloud,
-  Code2,
   CornerDownLeft,
   ExternalLink,
   MessageSquare,
@@ -22,20 +18,15 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import type { Config, SdkKind, SessionMode } from "./types";
-import { copyText, downloadJSON, formatTime } from "./types";
 import { getStandaloneChromeUrl } from "./browserToken";
+import { ChatAvatar, Equalizer, IntroMic } from "./components";
+import { useMicTester } from "./hooks/useMicTester";
+import { PlaygroundCodePanel } from "./sections/PlaygroundCodePanel";
+import { downloadJSON, formatTime } from "./types";
+import type { Config, SessionMode } from "./types";
 import type { AgentSessionController } from "./useAgentSession";
-import {
-  ChatAvatar,
-  CodeBlock,
-  CopyButton,
-  Equalizer,
-  IntroMic,
-} from "./components";
-import { snippet } from "./code";
 
-const stateLabels = {
+const STATE_LABELS = {
   idle: "Ready when you are",
   ended: "Session ended",
   connecting: "Connecting your agent",
@@ -43,7 +34,7 @@ const stateLabels = {
   thinking: "Thinking",
   speaking: "Speaking",
   reconnecting: "Reconnecting",
-};
+} as const;
 
 export function Playground({
   config,
@@ -63,85 +54,23 @@ export function Playground({
   onToast: (message: string) => void;
 }) {
   const [tab, setTab] = useState<"conversation" | "events">("conversation");
-  const [sdk, setSdk] = useState<SdkKind>("python");
   const [input, setInput] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [micTesting, setMicTesting] = useState(false);
-  const [micLevel, setMicLevel] = useState(0);
-  const [micLabel, setMicLabel] = useState("");
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const micAudioCtxRef = useRef<AudioContext | null>(null);
-  const micRafRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isEmbeddedIframe =
     typeof window !== "undefined" && window.self !== window.top;
   const standaloneUrl = getStandaloneChromeUrl();
-
-  const stopMicTest = () => {
-    if (micRafRef.current !== null) {
-      cancelAnimationFrame(micRafRef.current);
-      micRafRef.current = null;
-    }
-    micStreamRef.current?.getTracks().forEach((track) => track.stop());
-    micStreamRef.current = null;
-    void micAudioCtxRef.current?.close();
-    micAudioCtxRef.current = null;
-    setMicTesting(false);
-    setMicLevel(0);
-  };
+  const { micTesting, micLevel, micLabel, toggleMicTest } = useMicTester({
+    sessionActive: session.active,
+    isEmbeddedIframe,
+    onToast,
+  });
 
   useEffect(() => {
-    if (session.active && micTesting) stopMicTest();
-  }, [session.active, micTesting]);
-
-  useEffect(() => () => stopMicTest(), []);
-
-  async function toggleMicTest() {
-    if (micTesting) {
-      stopMicTest();
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      onToast(
-        "Chrome blocks microphone inside embedded frames — click 'Open in New Chrome Tab' first!",
-      );
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-      const trackLabel = stream.getAudioTracks()[0]?.label || "Chrome Microphone";
-      setMicLabel(trackLabel);
-      const ctx = new AudioContext();
-      micAudioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      const buffer = new Uint8Array(analyser.frequencyBinCount);
-      setMicTesting(true);
-      onToast(`Microphone ready: ${trackLabel}`);
-      const tick = () => {
-        analyser.getByteFrequencyData(buffer);
-        const avg = buffer.reduce((sum, val) => sum + val, 0) / buffer.length;
-        setMicLevel(Math.min(100, Math.round(avg * 1.9)));
-        micRafRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-    } catch {
-      onToast(
-        isEmbeddedIframe
-          ? "Embedded preview blocked mic — click 'Open in New Chrome Tab' to use your Chrome microphone!"
-          : "Microphone blocked — click the lock/tune icon in your Chrome address bar and Allow Microphone.",
-      );
-    }
-  }
-
-  useEffect(() => {
-    if (scrollRef.current)
+    if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [session.messages, session.logs, session.partial, tab]);
 
   useEffect(() => {
@@ -149,8 +78,9 @@ export function Playground({
       session.active &&
       session.state === "listening" &&
       !document.querySelector('[role="dialog"]')
-    )
+    ) {
       inputRef.current?.focus({ preventScroll: true });
+    }
   }, [session.active, session.state]);
 
   const canSend =
@@ -174,23 +104,8 @@ export function Playground({
           ? "Ready for your message"
           : session.state === "thinking"
             ? "Simulating the pipeline"
-            : stateLabels[session.state]
-      : stateLabels[session.state];
-
-  async function copy() {
-    try {
-      await copyText(snippet(config, sdk));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      onToast(
-        sdk === "python"
-          ? "Python configuration copied."
-          : "Node.js configuration copied.",
-      );
-    } catch (error) {
-      onToast((error as Error).message);
-    }
-  }
+            : STATE_LABELS[session.state]
+      : STATE_LABELS[session.state];
 
   return (
     <div className="playground-grid">
@@ -315,8 +230,8 @@ export function Playground({
           <div className="mic-ready-strip">
             <Mic />
             <span>
-              Chrome mic active: <strong>{micLabel}</strong> — speak now to check
-              your level, then click <strong>Start session</strong>.
+              Chrome mic active: <strong>{micLabel}</strong> — speak now to
+              check your level, then click <strong>Start session</strong>.
             </span>
           </div>
         )}
@@ -568,69 +483,11 @@ export function Playground({
           </div>
         </div>
       </section>
-      <section className="code-panel panel" aria-label="Quick start code">
-        <div className="panel-heading">
-          <h2>
-            <span className="heading-icon">
-              <Code2 />
-            </span>
-            Your stack in code
-          </h2>
-          <div className="code-toolbar">
-            <div className="mode-switch sdk-switch" aria-label="SDK language">
-              <button
-                type="button"
-                className={sdk === "python" ? "selected" : ""}
-                onClick={() => setSdk("python")}
-                aria-pressed={sdk === "python"}
-              >
-                Python
-              </button>
-              <button
-                type="button"
-                className={sdk === "node" ? "selected" : ""}
-                onClick={() => setSdk("node")}
-                aria-pressed={sdk === "node"}
-              >
-                Node.js
-              </button>
-            </div>
-            <CopyButton onClick={() => void copy()} copied={copied} />
-          </div>
-        </div>
-        <div className="code-filename">
-          <Braces />
-          <span>{sdk === "python" ? "agent.py" : "src/main.ts"}</span>
-          <span className="code-sync-indicator">
-            <Check />
-            Synced with your {config.pipeline === "realtime" ? "realtime model" : "models"}
-          </span>
-        </div>
-        <CodeBlock code={snippet(config, sdk)} lineNumbers compact />
-        <div className="code-panel-note">
-          <ShieldNote />
-          <p>
-            One set of Cloud credentials.
-            <br />
-            <span>No separate provider API keys.</span>
-          </p>
-        </div>
-        <button className="code-panel-footer" onClick={onCode}>
-          <span>Get the complete agent</span>
-          <ChevronRight />
-        </button>
-      </section>
-    </div>
-  );
-}
-
-function ShieldNote() {
-  return (
-    <div className="shield-note">
-      <Cloud />
-      <span className="shield-tiny-check">
-        <Check />
-      </span>
+      <PlaygroundCodePanel
+        config={config}
+        onCode={onCode}
+        onToast={onToast}
+      />
     </div>
   );
 }

@@ -570,3 +570,29 @@ def test_remote_writes_are_allowed_with_the_configured_token(
 def test_local_writes_stay_open_for_development(client, configured):
     """localhost keeps working without a token so `python start.py` needs no setup."""
     assert client.post("/api/sessions", json={}).status_code == 200
+
+
+def test_structured_logging_and_request_id_propagation(client, capsys):
+    """Every request emits a JSON log entry with method, path, status, and X-Request-ID."""
+    auto_res = client.get("/api/health")
+    generated_id = auto_res.headers["x-request-id"]
+    assert len(generated_id) == 32
+
+    # Valid caller-supplied X-Request-ID is preserved across headers and structured JSON logs.
+    capsys.readouterr()
+    traced = client.get("/api/status", headers={"X-Request-ID": "req-wave2-trace-42"})
+    assert traced.headers["x-request-id"] == "req-wave2-trace-42"
+    raw_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert raw_lines, "Expected structlog JSON output on stdout"
+    log_entry = json.loads(raw_lines[-1])
+    assert log_entry["event"] == "http_request"
+    assert log_entry["method"] == "GET"
+    assert log_entry["path"] == "/api/status"
+    assert log_entry["status_code"] == 200
+    assert log_entry["request_id"] == "req-wave2-trace-42"
+    assert isinstance(log_entry["duration_ms"], (int, float))
+
+    # Unsafe X-Request-ID values (spaces/control chars) are rejected and replaced.
+    sanitized = client.get("/api/health", headers={"X-Request-ID": "bad id with spaces!"})
+    assert sanitized.headers["x-request-id"] != "bad id with spaces!"
+    assert len(sanitized.headers["x-request-id"]) == 32

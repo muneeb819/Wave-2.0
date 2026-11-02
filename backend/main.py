@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
+import os
 import re
 import time
 from collections import defaultdict, deque
@@ -11,6 +13,7 @@ from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import structlog
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +42,26 @@ LOCAL_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 FINGERPRINTED_ASSET = re.compile(
     r"-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico|map)$"
 )
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+_LOG_LEVEL_NAME = os.environ.get("LOG_LEVEL", "INFO").upper()
+_LOG_LEVEL = getattr(logging, _LOG_LEVEL_NAME, logging.INFO)
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(_LOG_LEVEL),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=False,
+)
+logger = structlog.get_logger("inference-studio.api")
 
 app = FastAPI(
     title="Wave 2.0 Inference Studio API",
@@ -60,29 +83,66 @@ def cache_control_for(path: str) -> str:
     return "public, max-age=3600"
 
 
+def resolve_request_id(incoming: str | None) -> str:
+    """Propagate a safe caller-supplied X-Request-ID or mint a fresh identifier."""
+    candidate = (incoming or "").strip()
+    if candidate and REQUEST_ID_PATTERN.match(candidate):
+        return candidate
+    return uuid4().hex
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    # The frontend and API use a same-origin Vite proxy; reject cross-origin browser POSTs.
-    origin = request.headers.get("origin")
-    if (
-        request.method == "POST"
-        and origin
-        and urlparse(origin).netloc != request.headers.get("host")
-    ):
-        return JSONResponse({"detail": "Cross-origin requests are not allowed."}, status_code=403)
-    response = await call_next(request)
-    if request.url.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store"
-    elif response.status_code == 200 and "cache-control" not in response.headers:
-        response.headers["Cache-Control"] = cache_control_for(request.url.path)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Permissions-Policy"] = "microphone=*, autoplay=*"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
-    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
-        response.headers["Strict-Transport-Security"] = "max-age=15552000"
-    return response
+    request_id = resolve_request_id(request.headers.get("x-request-id"))
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
+    started = time.perf_counter()
+    try:
+        # The frontend and API use a same-origin Vite proxy; reject cross-origin browser POSTs.
+        origin = request.headers.get("origin")
+        if (
+            request.method == "POST"
+            and origin
+            and urlparse(origin).netloc != request.headers.get("host")
+        ):
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            logger.warning(
+                "http_request",
+                method=request.method,
+                path=request.url.path,
+                status_code=403,
+                duration_ms=duration_ms,
+                reason="cross_origin_rejected",
+            )
+            return JSONResponse(
+                {"detail": "Cross-origin requests are not allowed."},
+                status_code=403,
+                headers={"X-Request-ID": request_id},
+            )
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        elif response.status_code == 200 and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = cache_control_for(request.url.path)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "microphone=*, autoplay=*"
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=15552000"
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        logger.info(
+            "http_request",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+        return response
+    finally:
+        structlog.contextvars.clear_contextvars()
 
 
 def is_local_request(request: Request) -> bool:

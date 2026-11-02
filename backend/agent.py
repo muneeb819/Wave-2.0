@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
+import structlog
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import (
@@ -38,7 +38,7 @@ from .config import DEFAULTS, SessionConfig, agent_name
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env.local")
-logger = logging.getLogger("inference-studio.agent")
+logger = structlog.get_logger("inference-studio.agent")
 
 LANGUAGE_NAMES = {
     "en": "English",
